@@ -2,6 +2,7 @@ import pandas as pd
 import sqlite3 as sql
 import os
 
+os.makedirs("db")
 dbpath = "db/banco.db"
 
 def string_insert(str, substring, pos) -> str:
