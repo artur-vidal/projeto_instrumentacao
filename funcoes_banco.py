@@ -1,8 +1,7 @@
-import pandas as pd
 import sqlite3 as sql
-import os
+import os, bcrypt, pathlib
 
-os.makedirs("db")
+if not pathlib.Path("db").exists(): os.makedirs("db") 
 dbpath = "db/banco.db"
 
 def string_insert(str, substring, pos) -> str:
@@ -13,7 +12,7 @@ def criar_tabelas() -> None:
     "Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente."
 
     # Criando a conexão
-    db = sql.connect("db/banco.db")
+    db = sql.connect(dbpath)
     cursor = db.cursor()
 
     # Tabela de equipamentos
@@ -49,9 +48,9 @@ def criar_tabelas() -> None:
         CREATE TABLE IF NOT EXISTS usuarios(
             nome TEXT,
             senha TEXT,
-            email TEXT UNIQUE,
-            cpf INT PRIMARY KEY,
-            cpf_format TEXT
+            email TEXT PRIMARY KEY,
+            cpf INT UNIQUE,
+            cpf_format TEXT UNIQUE
         )
         """
     )
@@ -64,7 +63,7 @@ def limpar_tabelas(tabela : str) -> None:
     "Função de debug para limpar uma tabela."
 
     # Criando conexão e cursor
-    db = sql.connect("db/banco.db")
+    db = sql.connect(dbpath)
     cursor = db.cursor()
 
     # Limpando
@@ -150,22 +149,30 @@ def novo_usuario() -> None:
     os.system("cls")
     print("Cadastrando".center(50, "-"))
 
+    # Pegando nome
     nome = ""
     while nome == "": nome = input("Nome do usuário: ")
+    
+    # Pegando senha e criptografando
+    senha = ""
+    while senha == "": senha = input("Senha do usuário: ")
+    senha = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
+
+    # Pegando CPF e e-mail
     cpf = get_cpf()
     email = get_email()
 
     # Criando conexão e cursor
-    db = sql.connect("db/banco.db")
+    db = sql.connect(dbpath)
     cursor = db.cursor()
 
     # Adicionando o usuário no banco:
     try:
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, email, cpf, cpf_format)
-            VALUES (?, ?, ?, ?)
-            """, (nome, email, cpf["num"], cpf["formato"])
+            INSERT INTO usuarios (nome, senha, email, cpf, cpf_format)
+            VALUES (?, ?, ?, ?, ?)
+            """, (nome, senha, email, cpf["num"], cpf["formato"])
         )
     except sql.IntegrityError:
         print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
@@ -175,3 +182,32 @@ def novo_usuario() -> None:
     db.close()
 
     input("Enter para continuar...")
+
+def login(email : str, password : str) -> bool:
+    "Retorna True ou False baseado na existência do usuário (identificado por e-mail) E se a senha está correta."
+
+    # Criando conexão pra checar os dados
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    # Checando se o usuário existe
+    cursor.execute("SELECT senha FROM usuarios WHERE email = ?", (email,))
+    search = cursor.fetchone() # Pegando o usuário apenas
+    retorna = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
+
+    if search: # existe
+
+        # Guardando a senha
+        senha = search[0]
+
+        # Descriptografando e verificando
+        if bcrypt.checkpw(password.encode("utf-8"), senha): # comparo as duas séries de bytes, se forem iguais, retorna True
+            retorna = True
+        else:
+            retorna = False
+    else:
+        retorna = False
+
+    # Fechando conexão
+    db.close()
+    return retorna
