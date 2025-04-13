@@ -1,12 +1,10 @@
 from funcoes_banco import *
-import pandas as pd
 
 def menu_usuario() -> None:
     "Menu de usuários. Debug."
 
     while True:
-        os.system("cls")
-        print("USUÁRIOS".center(50, "-"))
+        title("USUÁRIOS")
 
         # Pegando comando
         comando = input("1. novo usuario\n2. fazer login\n3. mostrar tabela\n4. limpar tabela\n5. voltar\n")
@@ -29,10 +27,15 @@ def menu_usuario() -> None:
                     # Conexão pra printar o usuário
                     db = sql.connect(dbpath)
                     cursor = db.cursor()
-                    cursor.execute("SELECT nome FROM usuarios WHERE email = ?", (email,))
-                    user = cursor.fetchone()[0] # Pegando o usuário da busca
+                    cursor.execute("SELECT nome, admin FROM usuarios WHERE email = ?", (email,)) # Buscando usuário
+                    search = cursor.fetchone()
 
-                    print(f"{user} logado com sucesso!")
+                    user = search[0] # Pegando o usuário da busca
+                    adm = search[1] # Checando se é administrador
+
+                    adm_str = ""
+                    if adm: adm_str = "<ADMINISTRADOR> "
+                    print(f"{user} {adm_str}logado com sucesso!")
 
                     # Fechando
                     db.close()
@@ -54,8 +57,7 @@ def menu_equipamento() -> None:
     "Menu para registrar equipamentos." 
 
     while True:
-        os.system("cls")
-        print("EQUIPAMENTOS".center(50, "-"))
+        title("EQUIPAMENTOS")
 
         # Pegando comando
         comando = input("1. novo equipamento\n2. achar equipamento\n3. mostrar tabela\n4. limpar tabela\n5. voltar\n")
@@ -80,6 +82,35 @@ def menu_equipamento() -> None:
             case "5":
                 break
 
+def menu_ferramenta() -> None:
+    "Menu para registrar ferramentas."
+
+    while True:
+        title("FERRAMENTAS")
+
+        # Pegando comando
+        comando = input("1. nova ferramenta\n2. achar ferramenta\n3. mostrar tabela\n4. limpar tabela\n5. voltar\n")
+        
+        # Rodando comando
+        match comando:
+            case "1":
+                title("CADASTRANDO FERRAMENTA")
+                novo_ferramenta()
+                input("Enter para continuar...")
+            case "2":
+                title("PESQUISAR FERRAMENTA")
+                achar_ferramenta()
+                input("Enter para continuar...")
+            case "3":
+                mostrar_tabela("ferramentas")
+                input("Enter para continuar...")
+            case "4":
+                limpar_tabela("ferramentas")
+                print("Tabela limpa.")
+                input("Enter para continuar...") 
+            case "5":
+                break
+
 def main():
     criar_tabelas()
 
@@ -94,6 +125,8 @@ def main():
                 menu_usuario()
             case "2":
                 menu_equipamento()
+            case "3":
+                menu_ferramenta()
             case "4":
                 break
 

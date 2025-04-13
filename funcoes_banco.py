@@ -92,7 +92,8 @@ def criar_tabelas() -> None:
             senha TEXT NOT NULL,
             email TEXT NOT NULL PRIMARY KEY,
             cpf INT UNIQUE,
-            cpf_format TEXT
+            cpf_format TEXT,
+            admin BOOL
         )
         """
     )
@@ -215,6 +216,10 @@ def novo_usuario() -> None:
     cpf = get_cpf()
     email = get_email()
 
+    # É admin?
+    admin = input_choice("Administrador (S/N) ", "S", "N")
+    is_admin = True if admin == "S" else False
+
     # Criando conexão e cursor
     db = sql.connect(dbpath)
     cursor = db.cursor()
@@ -223,9 +228,9 @@ def novo_usuario() -> None:
     try:
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, senha, email, cpf, cpf_format)
-            VALUES (?, ?, ?, ?, ?)
-            """, (nome, senha, email, cpf["num"], cpf["formato"])
+            INSERT INTO usuarios (nome, senha, email, cpf, cpf_format, admin)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, (nome, senha, email, cpf["num"], cpf["formato"], is_admin)
         )
     except sql.IntegrityError:
         print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
@@ -233,8 +238,6 @@ def novo_usuario() -> None:
     # Commitando e fechando a conexão
     db.commit()
     db.close()
-
-    input("Enter para continuar...")
 
 def login(email : str, password : str) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail) e se a senha está correta."
@@ -265,7 +268,7 @@ def login(email : str, password : str) -> bool:
     db.close()
     return retorna
 
-# Funções de equip. e ferramentas
+# Funções de equipamento
 def novo_equipamento() -> None:
     "Pede as informações e adiciona um equipamento ao banco."
 
@@ -299,7 +302,7 @@ def novo_equipamento() -> None:
 def achar_equipamento() -> None:
     "Pede ao usuário que insira o ID ou nome do modelo, e procura esse equipamento na tabela."
 
-    equip = input_notnull("Insira o ID ou modelo da ferramenta: ")
+    equip = input_notnull("Insira o ID ou modelo do equipamento: ")
 
     # Conectando
     db = sql.connect("db/banco.db")
@@ -317,6 +320,59 @@ def achar_equipamento() -> None:
         for i in search: print(i)
     else:
         print("Equipamento não foi encontrado.")
+
+    # Desconectando
+    db.close()
+
+# Funções de ferramenta
+def novo_ferramenta() -> None:
+    "Pede as informações e adiciona a ferramenta ao banco."
+
+    nome = input_notnull("Nome: ")
+    modelo = input_notnull("Modelo: ").upper().replace(".-", "") # Tudo maiúsculo, sem espaços e hífens
+    fabricante = input("Fabricante: ")
+    estado = input("Estado: ")
+    
+    # Conectando e criando cursor
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    # Adicionando ao banco
+    try:
+        cursor.execute(
+            """
+            INSERT INTO ferramentas (nome, modelo, fabricante, estado)
+            VALUES (?, ?, ?, ?)
+            """, (nome, modelo, fabricante, estado)
+        )
+    except sql.IntegrityError:
+        print("\nErro no registro\nModelo já foi registrado.\n")
+
+    # Commitando e fechando conexão
+    db.commit()
+    db.close()
+
+def achar_ferramenta() -> None:
+    "Pede ao usuário que insira o ID ou nome do modelo, e procura essa ferramenta na tabela."
+
+    equip = input_notnull("Insira o ID ou modelo da ferramenta: ")
+
+    # Conectando
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    if(equip.isdigit()): # É um ID
+        equip = int(equip) # Convertendo pra inteiro
+        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (equip,))
+    else: # É modelo
+        cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (equip,))
+    search = cursor.fetchone() # Guardando a busca
+
+    if search:
+        # Rodando pelos valores encontrados e printando
+        for i in search: print(i)
+    else:
+        print("Ferramenta não foi encontrada.")
 
     # Desconectando
     db.close()
