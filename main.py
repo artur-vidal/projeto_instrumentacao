@@ -1,30 +1,27 @@
 from funcoes_banco import *
 import pandas as pd
 
-def main():
-    criar_tabelas()
+def menu_usuario() -> None:
+    "Menu de usuários. Debug."
 
-    # Pegando os comandos
     while True:
         os.system("cls")
-        print("DATABASE".center(50, "-"))
-        comando = input("1. novo usuario\n2. fazer login\n3. ver banco\n4. limpar banco\n5. sair\n")
-        while comando not in ["1", "2", "3", "4", "5"]:
-            comando = input("Inválido. Tente novamente:")
-        
+        print("USUÁRIOS".center(50, "-"))
+
+        # Pegando comando
+        comando = input("1. novo usuario\n2. fazer login\n3. mostrar tabela\n4. limpar tabela\n5. voltar\n")
+
         match comando:
             case "1":
+                title("CADASTRANDO")
                 novo_usuario()
+                input("Enter para continuar...")
             case "2":
-                os.system("cls")
-                print("LOGIN".center(50, "-"))
+                title("LOGIN")
 
                 # Pegando valores
-                email = input("E-mail: ")
-                while email == "": email = input("E-mail: ")
-
-                senha = input("Senha: ")
-                while senha == "": senha = input("Senha: ")
+                email = input_notnull("E-mail: ")
+                senha = input_notnull("Senha: ")
 
                 # Rodando função
                 if login(email, senha):
@@ -43,28 +40,61 @@ def main():
                     print("Login falhou. Verifique se o e-mail e senha estão corretos.")
                 
                 input("Enter para continuar...")
-
             case "3":
-                # Printando
-                os.system("cls")
-
-                # Conectando
-                db = sql.connect(dbpath)
-
-                print("BANCO ATUAL".center(50, "-"))
-                print(pd.DataFrame(pd.read_sql("SELECT * FROM usuarios", db)))
-
-                # Fechando conexão
-                db.close()
-
+                mostrar_tabela("usuarios")
                 input("Enter para continuar...")
             case "4":
-                os.system("cls")
-                print("Limpar tabela".center(50, "-"))
-                limpar_tabelas("usuarios")
+                limpar_tabela("usuarios")
                 print("Tabela limpa.")
                 input("Enter para continuar...")
             case "5":
+                break
+
+def menu_equipamento() -> None:
+    "Menu para registrar equipamentos." 
+
+    while True:
+        os.system("cls")
+        print("EQUIPAMENTOS".center(50, "-"))
+
+        # Pegando comando
+        comando = input("1. novo equipamento\n2. achar equipamento\n3. mostrar tabela\n4. limpar tabela\n5. voltar\n")
+        
+        # Rodando comando
+        match comando:
+            case "1":
+                title("CADASTRANDO EQUIPAMENTO")
+                novo_equipamento()
+                input("Enter para continuar...")
+            case "2":
+                title("PESQUISAR EQUIPAMENTO")
+                achar_equipamento()
+                input("Enter para continuar...")
+            case "3":
+                mostrar_tabela("equipamentos")
+                input("Enter para continuar...")
+            case "4":
+                limpar_tabela("equipamentos")
+                print("Tabela limpa.")
+                input("Enter para continuar...") 
+            case "5":
+                break
+
+def main():
+    criar_tabelas()
+
+    # Pegando os comandos
+    while True:
+        os.system("cls")
+        print("DATABASE".center(50, "-"))
+        comando = input("1. menu de usuarios\n2. menu de equipamentos\n3. menu de ferramentas\n4. sair\n")
+        
+        match comando:
+            case "1":
+                menu_usuario()
+            case "2":
+                menu_equipamento()
+            case "4":
                 break
 
 if(__name__ == "__main__"): 

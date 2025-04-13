@@ -1,15 +1,57 @@
 import sqlite3 as sql
+import pandas as pd
 import os, bcrypt, pathlib
 
 if not pathlib.Path("db").exists(): os.makedirs("db") 
 dbpath = "db/banco.db"
 
+# Utilitarios
 def string_insert(str, substring, pos) -> str:
     "Insere uma substring dentro da string passada na posição passada, e retorna o resultado."
     return str[:pos] + substring + str[pos+len(substring)-1:]
 
+def input_notnull(text = "") -> str:
+    var = input(text)
+    while var == "": var = input(text)
+    return var
+
+def input_choice(text = "", *args : str) -> str:
+    "Pega uma entrada do usuário e filtra baseado na lista de escolhas que ele passar"
+
+    var = input_notnull(text)
+    while var not in args: var = input_notnull(text)
+    return var
+
+def title(text : str) -> None:
+    os.system("cls")
+    print(text.center(50, "-"))
+    
+# Manipular banco
 def criar_tabelas() -> None:
-    "Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente."
+    """Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente.
+
+    Equipamentos 
+        - Nome (string not null)
+        - Modelo (string not null primary key)
+        - Fabricante (string)
+        - Estado (string)
+        - Tipo de Manutenção (string)
+        - Ferramentas (string)
+        - Periodicidade (inteiro)
+    
+    Ferramentas 
+        - Nome (string not null)
+        - Modelo (string not null primary key)
+        - Fabricante (string)
+        - Estado (string)
+
+    Usuários 
+        - Nome (string not null)
+        - Senha (string not null)
+        - Email (string not null primary key)
+        - CPF (inteiro único)
+        - CPF formatado (string)
+    """
 
     # Criando a conexão
     db = sql.connect(dbpath)
@@ -19,8 +61,8 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS equipamentos(
-            nome TEXT,
-            modelo TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            modelo TEXT NOT NULL PRIMARY KEY,
             fabricante TEXT,
             estado TEXT,
             tipo_manutencao TEXT,
@@ -34,8 +76,8 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS ferramentas(
-            nome TEXT,
-            modelo TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            modelo TEXT NOT NULL PRIMARY KEY,
             fabricante TEXT,
             estado TEXT
         )
@@ -46,11 +88,11 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios(
-            nome TEXT,
-            senha TEXT,
-            email TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            senha TEXT NOT NULL,
+            email TEXT NOT NULL PRIMARY KEY,
             cpf INT UNIQUE,
-            cpf_format TEXT UNIQUE
+            cpf_format TEXT
         )
         """
     )
@@ -59,8 +101,10 @@ def criar_tabelas() -> None:
     db.commit()
     db.close()
 
-def limpar_tabelas(tabela : str) -> None:
+def limpar_tabela(tabela : str) -> None:
     "Função de debug para limpar uma tabela."
+
+    title(f"LIMPAR TABELA \"{tabela}\"")
 
     # Criando conexão e cursor
     db = sql.connect(dbpath)
@@ -73,6 +117,20 @@ def limpar_tabelas(tabela : str) -> None:
     db.commit()
     db.close()
 
+def mostrar_tabela(tabela : str) -> None:
+    "Imprime a tabela escolhida no console"
+
+    title(f"TABELA \"{tabela}\"")
+    
+    # Conectando
+    db = sql.connect(dbpath)
+
+    print(pd.DataFrame(pd.read_sql(f"SELECT * FROM {tabela}", db)))
+
+    # Fechando conexão
+    db.close()
+    
+# Funções pra usuário
 def get_cpf() -> dict:
     "Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09)."
 
@@ -144,18 +202,13 @@ def get_email() -> str:
             email = get("E-mail inválido. Tente novamente: ")
     
 def novo_usuario() -> None:
-    "A função vai requisitar todos os dados para criar um usuário, vai verificá-los e retornar o usuário."
-
-    os.system("cls")
-    print("Cadastrando".center(50, "-"))
+    "A função vai requisitar todos os dados para criar um usuário, vai verificá-los e adicionar o usuário ao banco caso tudo esteja correto."
 
     # Pegando nome
-    nome = ""
-    while nome == "": nome = input("Nome do usuário: ")
-    
+    nome = input_notnull("Nome do usuário: ")
+
     # Pegando senha e criptografando
-    senha = ""
-    while senha == "": senha = input("Senha do usuário: ")
+    senha = input_notnull("Senha: ")
     senha = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
 
     # Pegando CPF e e-mail
@@ -184,7 +237,7 @@ def novo_usuario() -> None:
     input("Enter para continuar...")
 
 def login(email : str, password : str) -> bool:
-    "Retorna True ou False baseado na existência do usuário (identificado por e-mail) E se a senha está correta."
+    "Retorna True ou False baseado na existência do usuário (identificado por e-mail) e se a senha está correta."
 
     # Criando conexão pra checar os dados
     db = sql.connect("db/banco.db")
@@ -211,3 +264,62 @@ def login(email : str, password : str) -> bool:
     # Fechando conexão
     db.close()
     return retorna
+
+# Funções de equip. e ferramentas
+def novo_equipamento() -> None:
+    "Pede as informações e adiciona um equipamento ao banco."
+
+    nome = input_notnull("Nome: ")
+    modelo = input_notnull("Modelo: ").upper().replace(".-", "") # Tudo maiúsculo, sem espaços e hífens
+    fabricante = input("Fabricante: ")
+    estado = input("Estado: ")
+    tipo_manutencao = input_choice("Manutenção preventiva ou corretiva? ", "preventiva", "corretiva")
+    ferramentas = input("Ferramentas: ")
+    periodo = int(input("Periodicidade em meses: "))
+    
+    # Conectando e criando cursor
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    # Adicionando ao banco
+    try:
+        cursor.execute(
+            """
+            INSERT INTO equipamentos (nome, modelo, fabricante, estado, tipo_manutencao, ferramentas, periodo_meses)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (nome, modelo, fabricante, estado, tipo_manutencao, ferramentas, periodo)
+        )
+    except sql.IntegrityError:
+        print("\nErro no registro\nModelo já foi registrado.\n")
+
+    # Commitando e fechando conexão
+    db.commit()
+    db.close()
+
+def achar_equipamento() -> None:
+    "Pede ao usuário que insira o ID ou nome do modelo, e procura esse equipamento na tabela."
+
+    equip = input_notnull("Insira o ID ou modelo da ferramenta: ")
+
+    # Conectando
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    if(equip.isdigit()): # É um ID
+        equip = int(equip) # Convertendo pra inteiro
+        cursor.execute("SELECT * FROM equipamentos WHERE rowid = ?", (equip,))
+    else: # É modelo
+        cursor.execute("SELECT * FROM equipamentos WHERE modelo = ?", (equip,))
+    search = cursor.fetchone() # Guardando a busca
+
+    if search:
+        # Rodando pelos valores encontrados e printando
+        for i in search: print(i)
+    else:
+        print("Equipamento não foi encontrado.")
+
+    # Desconectando
+    db.close()
+
+if __name__ == "__main__":
+    ...
