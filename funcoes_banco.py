@@ -11,18 +11,22 @@ def string_insert(str, substring, pos) -> str:
     return str[:pos] + substring + str[pos+len(substring)-1:]
 
 def input_notnull(text = "") -> str:
+    "Igual a um input(), mas não aceita valores vazios."
+
     var = input(text)
     while var == "": var = input(text)
     return var
 
 def input_choice(text = "", *args : str) -> str:
-    "Pega uma entrada do usuário e filtra baseado na lista de escolhas que ele passar"
+    "Pega uma entrada do usuário e filtra baseado nas escolhas que ele passar."
 
     var = input_notnull(text)
     while var not in args: var = input_notnull(text)
     return var
 
 def title(text : str) -> None:
+    "Limpa o console e printa uma linha de título."
+
     os.system("cls")
     print(text.center(50, "-"))
     
@@ -93,7 +97,7 @@ def criar_tabelas() -> None:
             email TEXT NOT NULL PRIMARY KEY,
             cpf INT UNIQUE,
             cpf_format TEXT,
-            admin BOOL
+            admin BOOL NOT NULL
         )
         """
     )
@@ -132,20 +136,12 @@ def mostrar_tabela(tabela : str) -> None:
     db.close()
     
 # Funções pra usuário
-def get_cpf() -> dict:
-    "Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09)."
-
-    get = lambda x: input(x).strip() # Lambda para deixar o código mais limpo
-
-    # Essa variável é o valor numérico "cru"
-    cpf = get("Insira o CPF (11 dígitos), sem pontos ou hífens: ")
+def check_cpf(cpf) -> dict:
+    """Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09).
+    Se for inválido, retorna None"""
 
     while True:
 
-        # Se passar do limite ou conter letras, a sintaxe é inválida.
-        while len(cpf) != 11 or not cpf.isdigit(): 
-            cpf = get("CPF inválido. Verifique se os 11 dígitos estão corretos: ")
-        
         # Depois que a formatação estiver correta, eu faço o algoritmo para verificar a validez
         sequencia = [int(cpf[i]) for i in range(9)]
         verificadores = [int(cpf[i]) for i in range(9, 11)]
@@ -178,16 +174,13 @@ def get_cpf() -> dict:
 
                 return dict(num=cpf, formato=cpf_str)
             else: # Não bateu o valor, é falso
-                cpf = get("O CPF não existe. Tente novamente: ")
+                return None
 
         else: # Se não deu certo, quebro o loop
-            cpf = get("O CPF parece falso. Tente novamente: ")
+            return None
 
-def get_email() -> str:
-    "Pega um email via input() e o retorna após as verificações. exemplo@dominio"
-
-    get = lambda x: input(x).lower().strip() # Lambda para deixar o código mais limpo
-    email = get("Insira seu e-mail: ")
+def check_email(email) -> bool:
+    "Pega um email via input() retorna True após validação. Retorna False se for inválido. exemplo@dominio"
 
     while True:
         # Verificando se tem um arroba só no email. Caso contrário, tem algo errado.
@@ -196,29 +189,14 @@ def get_email() -> str:
             # Verificando se existe local e domínio (antes/depois do @)
             atpos = email.find("@")
             if(email[:atpos] == "" or email[atpos+1:] == ""):
-                email = get("E-mail inválido. Tente novamente: ")
+                return False
             else:
-                return email
+                return True
         else:
-            email = get("E-mail inválido. Tente novamente: ")
+            return False
     
-def novo_usuario() -> None:
+def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) -> None:
     "A função vai requisitar todos os dados para criar um usuário, vai verificá-los e adicionar o usuário ao banco caso tudo esteja correto."
-
-    # Pegando nome
-    nome = input_notnull("Nome do usuário: ")
-
-    # Pegando senha e criptografando
-    senha = input_notnull("Senha: ")
-    senha = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
-
-    # Pegando CPF e e-mail
-    cpf = get_cpf()
-    email = get_email()
-
-    # É admin?
-    admin = input_choice("Administrador (S/N) ", "S", "N")
-    is_admin = True if admin == "S" else False
 
     # Criando conexão e cursor
     db = sql.connect(dbpath)
@@ -230,7 +208,7 @@ def novo_usuario() -> None:
             """
             INSERT INTO usuarios (nome, senha, email, cpf, cpf_format, admin)
             VALUES (?, ?, ?, ?, ?, ?)
-            """, (nome, senha, email, cpf["num"], cpf["formato"], is_admin)
+            """, (nome, senha, email, cpf["num"], cpf["formato"], admin)
         )
     except sql.IntegrityError:
         print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
@@ -239,7 +217,7 @@ def novo_usuario() -> None:
     db.commit()
     db.close()
 
-def login(email : str, password : str) -> bool:
+def login(usuario : str, password : str) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail) e se a senha está correta."
 
     # Criando conexão pra checar os dados
@@ -247,7 +225,10 @@ def login(email : str, password : str) -> bool:
     cursor = db.cursor()
 
     # Checando se o usuário existe
-    cursor.execute("SELECT senha FROM usuarios WHERE email = ?", (email,))
+    if check_email(usuario): # se for um email
+        cursor.execute("SELECT senha FROM usuarios WHERE email = ?", (usuario,))
+    else: # se for um usuário
+        cursor.execute("SELECT senha FROM usuarios WHERE nome = ?", (usuario,))
     search = cursor.fetchone() # Pegando o usuário apenas
     retorna = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
 
@@ -268,17 +249,28 @@ def login(email : str, password : str) -> bool:
     db.close()
     return retorna
 
-# Funções de equipamento
-def novo_equipamento() -> None:
-    "Pede as informações e adiciona um equipamento ao banco."
+def mudar_senha(usuario : str, password : str) -> None:
+    "Muda a senha do usuário desejado. Printa um erro caso o usuário não exista. Só deve ser usada pelo administrador."
 
-    nome = input_notnull("Nome: ")
-    modelo = input_notnull("Modelo: ").upper().replace(".-", "") # Tudo maiúsculo, sem espaços e hífens
-    fabricante = input("Fabricante: ")
-    estado = input("Estado: ")
-    tipo_manutencao = input_choice("Manutenção preventiva ou corretiva? ", "preventiva", "corretiva")
-    ferramentas = input("Ferramentas: ")
-    periodo = int(input("Periodicidade em meses: "))
+    # Conectando
+    db = sql.connect("db/banco.db")
+    cursor = db.cursor()
+
+    # Pegando por e-mail ou nome
+    inserido = ""
+    if check_email(usuario): inserido = "email" # se for um email
+    else: inserido = "nome" # se for um usuário
+
+    # Executando
+    cursor.execute("UPDATE usuarios SET senha = ? WHERE ? = ?", (password, inserido, usuario))
+
+    # Fechando conexão
+    db.commit()
+    db.close()
+
+# Funções de equipamento
+def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, tipo_manutencao : str, ferramentas : str, periodo : str) -> None:
+    "Pede as informações e adiciona um equipamento ao banco."
     
     # Conectando e criando cursor
     db = sql.connect("db/banco.db")
@@ -299,10 +291,8 @@ def novo_equipamento() -> None:
     db.commit()
     db.close()
 
-def achar_equipamento() -> None:
+def achar_equipamento(equip : str) -> None:
     "Pede ao usuário que insira o ID ou nome do modelo, e procura esse equipamento na tabela."
-
-    equip = input_notnull("Insira o ID ou modelo do equipamento: ")
 
     # Conectando
     db = sql.connect("db/banco.db")
@@ -325,13 +315,8 @@ def achar_equipamento() -> None:
     db.close()
 
 # Funções de ferramenta
-def novo_ferramenta() -> None:
+def novo_ferramenta(nome : str, modelo : str, fabricante : str, estado : str) -> None:
     "Pede as informações e adiciona a ferramenta ao banco."
-
-    nome = input_notnull("Nome: ")
-    modelo = input_notnull("Modelo: ").upper().replace(".-", "") # Tudo maiúsculo, sem espaços e hífens
-    fabricante = input("Fabricante: ")
-    estado = input("Estado: ")
     
     # Conectando e criando cursor
     db = sql.connect("db/banco.db")
@@ -352,20 +337,18 @@ def novo_ferramenta() -> None:
     db.commit()
     db.close()
 
-def achar_ferramenta() -> None:
+def achar_ferramenta(ferramenta : str) -> None:
     "Pede ao usuário que insira o ID ou nome do modelo, e procura essa ferramenta na tabela."
-
-    equip = input_notnull("Insira o ID ou modelo da ferramenta: ")
 
     # Conectando
     db = sql.connect("db/banco.db")
     cursor = db.cursor()
 
-    if(equip.isdigit()): # É um ID
-        equip = int(equip) # Convertendo pra inteiro
-        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (equip,))
+    if(ferramenta.isdigit()): # É um ID
+        ferramenta = int(ferramenta) # Convertendo pra inteiro
+        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (ferramenta,))
     else: # É modelo
-        cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (equip,))
+        cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (ferramenta,))
     search = cursor.fetchone() # Guardando a busca
 
     if search:
