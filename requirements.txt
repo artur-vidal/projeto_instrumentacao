@@ -3,6 +3,7 @@ attrs==25.3.0
 bcrypt==4.3.0
 blinker==1.9.0
 cachetools==5.5.2
+captcha==0.7.1
 certifi==2025.1.31
 cffi==1.17.1
 charset-normalizer==3.4.1
@@ -10,6 +11,7 @@ click==8.1.8
 colorama==0.4.6
 cryptography==44.0.2
 et_xmlfile==2.0.0
+extra-streamlit-components==0.1.80
 gitdb==4.0.12
 GitPython==3.1.44
 idna==3.10
@@ -27,14 +29,17 @@ protobuf==5.29.4
 pyarrow==19.0.1
 pycparser==2.22
 pydeck==0.9.1
+PyJWT==2.10.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
+PyYAML==6.0.2
 referencing==0.36.2
 requests==2.32.3
 rpds-py==0.24.0
 six==1.17.0
 smmap==5.0.2
 streamlit==1.44.1
+streamlit-authenticator==0.4.2
 tenacity==9.1.2
 toml==0.10.2
 tornado==6.4.2

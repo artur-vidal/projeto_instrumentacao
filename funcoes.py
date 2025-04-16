@@ -1,5 +1,7 @@
 import sqlite3 as sql
 import pandas as pd
+import streamlit.components.v1 as components
+import streamlit as st
 import os, bcrypt, pathlib
 
 if not pathlib.Path("db").exists(): os.makedirs("db") 
@@ -29,7 +31,7 @@ def title(text : str) -> None:
 
     os.system("cls")
     print(text.center(50, "-"))
-    
+
 # Manipular banco
 def criar_tabelas() -> None:
     """Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente.
@@ -109,8 +111,6 @@ def criar_tabelas() -> None:
 def limpar_tabela(tabela : str) -> None:
     "Função de debug para limpar uma tabela."
 
-    title(f"LIMPAR TABELA \"{tabela}\"")
-
     # Criando conexão e cursor
     db = sql.connect(dbpath)
     cursor = db.cursor()
@@ -136,51 +136,50 @@ def mostrar_tabela(tabela : str) -> None:
     db.close()
     
 # Funções pra usuário
-def check_cpf(cpf) -> dict:
+def check_cpf(cpf : int) -> dict:
     """Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09).
     Se for inválido, retorna None"""
 
+    cpf_str = str(cpf)
+
     while True:
+        # Checagens pré-validação
+        if(len(cpf_str) == 11):
+            # Depois que a formatação estiver correta, eu faço o algoritmo para verificar a validez
+            sequencia = [int(cpf_str[i]) for i in range(9)]
+            verificadores = [int(cpf_str[i]) for i in range(9, 11)]
 
-        # Depois que a formatação estiver correta, eu faço o algoritmo para verificar a validez
-        sequencia = [int(cpf[i]) for i in range(9)]
-        verificadores = [int(cpf[i]) for i in range(9, 11)]
-
-        # PRIMEIRO DÍGITO
-        soma = 0
-        for i in range(1, 10): # Loop incluisivo de 1 a 9
-            soma += sequencia[i-1] * i
-        soma = soma % 11 if soma % 11 != 10 else 0 # Se o resto não for 10, eu o mantenho. Se não, igualo a 0.
-        
-        # Se está tudo certo
-        if(soma == verificadores[0]):
-
-            # Tirando o primeiro verificador e colocando direto na sequencia
-            sequencia.append(verificadores.pop(0))
-
-            # SEGUNDO DÍGITO (se o primeiro for correto)
+            # PRIMEIRO DÍGITO
             soma = 0
-            for i in range(10): # Loop inclusivo de 0 a 9
-                soma += sequencia[i] * i
+            for i in range(1, 10): # Loop incluisivo de 1 a 9
+                soma += sequencia[i-1] * i
             soma = soma % 11 if soma % 11 != 10 else 0 # Se o resto não for 10, eu o mantenho. Se não, igualo a 0.
+            
+            # Se está tudo certo
+            if(soma == verificadores[0]):
 
-            if(soma == verificadores[0]): # O segundo dígito tá certo, então, é válido!
-                
-                # Fazendo a versão formatada
-                cpf_str = str(cpf)
-                cpf_str = string_insert(cpf_str, ".", 3) # ponto 1
-                cpf_str = string_insert(cpf_str, ".", 7) # ponto 2
-                cpf_str = string_insert(cpf_str, "-", 11) # hífen
+                # Tirando o primeiro verificador e colocando direto na sequencia
+                sequencia.append(verificadores.pop(0))
 
-                return dict(num=cpf, formato=cpf_str)
-            else: # Não bateu o valor, é falso
+                # SEGUNDO DÍGITO (se o primeiro for correto)
+                soma = 0
+                for i in range(10): # Loop inclusivo de 0 a 9
+                    soma += sequencia[i] * i
+                soma = soma % 11 if soma % 11 != 10 else 0 # Se o resto não for 10, eu o mantenho. Se não, igualo a 0.
+
+                if(soma == verificadores[0]): # O segundo dígito tá certo, então, é válido!
+                    return cpf
+                else: # Não bateu o valor, é falso
+                    return None
+
+            else: # Se não deu certo, quebro o loop
                 return None
-
-        else: # Se não deu certo, quebro o loop
+            
+        else:
             return None
-
-def check_email(email) -> bool:
-    "Pega um email via input() retorna True após validação. Retorna False se for inválido. exemplo@dominio"
+        
+def check_email(email : str) -> str:
+    "Pega um email e o retorna após validação. Retorna None se for inválido. exemplo@dominio"
 
     while True:
         # Verificando se tem um arroba só no email. Caso contrário, tem algo errado.
@@ -188,13 +187,24 @@ def check_email(email) -> bool:
             
             # Verificando se existe local e domínio (antes/depois do @)
             atpos = email.find("@")
-            if(email[:atpos] == "" or email[atpos+1:] == ""):
-                return False
+            if(email[:atpos] == "" or email[atpos+1:] == ("" or ".")):
+                return None
             else:
-                return True
+                return email
         else:
-            return False
-    
+            return None
+
+def format_cpf(cpf : int | str):
+    "Formata um CPF com os traços e hífens."
+
+    # Fazendo a versão formatada
+    cpf_format = str(cpf)
+    cpf_format = string_insert(cpf_format, ".", 3) # ponto 1
+    cpf_format = string_insert(cpf_format, ".", 7) # ponto 2
+    cpf_format = string_insert(cpf_format, "-", 11) # hífen
+
+    return cpf_format
+
 def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) -> None:
     "A função vai requisitar todos os dados para criar um usuário, vai verificá-los e adicionar o usuário ao banco caso tudo esteja correto."
 
@@ -202,13 +212,17 @@ def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) 
     db = sql.connect(dbpath)
     cursor = db.cursor()
 
+    # Checando valores
+    cpf_add = check_cpf(cpf)
+    senha_add = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
+
     # Adicionando o usuário no banco:
     try:
         cursor.execute(
             """
             INSERT INTO usuarios (nome, senha, email, cpf, cpf_format, admin)
             VALUES (?, ?, ?, ?, ?, ?)
-            """, (nome, senha, email, cpf["num"], cpf["formato"], admin)
+            """, (nome, senha_add, email, cpf_add, format_cpf(cpf_add), admin)
         )
     except sql.IntegrityError:
         print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
@@ -217,18 +231,15 @@ def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) 
     db.commit()
     db.close()
 
-def login(usuario : str, password : str) -> bool:
-    "Retorna True ou False baseado na existência do usuário (identificado por e-mail) e se a senha está correta."
+def login(usuario : str | int, password : str | bytes) -> bool:
+    "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
 
     # Criando conexão pra checar os dados
     db = sql.connect("db/banco.db")
     cursor = db.cursor()
 
     # Checando se o usuário existe
-    if check_email(usuario): # se for um email
-        cursor.execute("SELECT senha FROM usuarios WHERE email = ?", (usuario,))
-    else: # se for um usuário
-        cursor.execute("SELECT senha FROM usuarios WHERE nome = ?", (usuario,))
+    cursor.execute("SELECT senha FROM usuarios WHERE nome = ? OR email = ? OR cpf = ?", (usuario.capitalize(), check_email(usuario), check_cpf(usuario)))
     search = cursor.fetchone() # Pegando o usuário apenas
     retorna = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
 
@@ -238,13 +249,14 @@ def login(usuario : str, password : str) -> bool:
         senha = search[0]
 
         # Descriptografando e verificando
-        if bcrypt.checkpw(password.encode("utf-8"), senha): # comparo as duas séries de bytes, se forem iguais, retorna True
+        # comparo as duas séries de bytes, se forem iguais, retorna True (também checo se a senha é uma string ou se já é uma série de bytes)
+        if bcrypt.checkpw(password.encode("utf-8") if type(password) == str else password, senha): 
             retorna = True
         else:
             retorna = False
     else:
         retorna = False
-
+    
     # Fechando conexão
     db.close()
     return retorna
