@@ -57,6 +57,7 @@ def criar_tabelas() -> None:
         - Email (string not null primary key)
         - CPF (inteiro único)
         - CPF formatado (string)
+        - Administrator (booleano not null)
     """
 
     # Criando a conexão
@@ -136,7 +137,7 @@ def mostrar_tabela(tabela : str) -> None:
     db.close()
     
 # Funções pra usuário
-def check_cpf(cpf : int) -> dict:
+def check_cpf(cpf : int) -> int | None:
     """Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09).
     Se for inválido, retorna None"""
 
@@ -144,7 +145,7 @@ def check_cpf(cpf : int) -> dict:
 
     while True:
         # Checagens pré-validação
-        if(len(cpf_str) == 11):
+        if(len(cpf_str) == 11 and cpf_str.isdigit()):
             # Depois que a formatação estiver correta, eu faço o algoritmo para verificar a validez
             sequencia = [int(cpf_str[i]) for i in range(9)]
             verificadores = [int(cpf_str[i]) for i in range(9, 11)]
@@ -178,7 +179,7 @@ def check_cpf(cpf : int) -> dict:
         else:
             return None
         
-def check_email(email : str) -> str:
+def check_email(email : str) -> str | None:
     "Pega um email e o retorna após validação. Retorna None se for inválido. exemplo@dominio"
 
     while True:
@@ -222,7 +223,7 @@ def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) 
             """
             INSERT INTO usuarios (nome, senha, email, cpf, cpf_format, admin)
             VALUES (?, ?, ?, ?, ?, ?)
-            """, (nome, senha_add, email, cpf_add, format_cpf(cpf_add), admin)
+            """, (nome.upper(), senha_add, email, cpf_add, format_cpf(cpf_add), admin)
         )
     except sql.IntegrityError:
         print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
@@ -239,7 +240,7 @@ def login(usuario : str | int, password : str | bytes) -> bool:
     cursor = db.cursor()
 
     # Checando se o usuário existe
-    cursor.execute("SELECT senha FROM usuarios WHERE nome = ? OR email = ? OR cpf = ?", (usuario.capitalize(), check_email(usuario), check_cpf(usuario)))
+    cursor.execute("SELECT senha FROM usuarios WHERE nome = ? OR email = ? OR cpf = ?", (usuario.upper(), check_email(usuario), check_cpf(usuario)))
     search = cursor.fetchone() # Pegando o usuário apenas
     retorna = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
 
@@ -280,6 +281,10 @@ def mudar_senha(usuario : str, password : str) -> None:
     db.commit()
     db.close()
 
+def is_logged(user_session_state : dict) -> bool:
+    "Retorna True se todos os valores estiverem preenchidos."
+    return None not in user_session_state.values()
+
 # Funções de equipamento
 def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, tipo_manutencao : str, ferramentas : str, periodo : str) -> None:
     "Pede as informações e adiciona um equipamento ao banco."
@@ -303,7 +308,7 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, t
     db.commit()
     db.close()
 
-def achar_equipamento(equip : str) -> None:
+def achar_equipamento(equip : str) -> tuple:
     "Pede ao usuário que insira o ID ou nome do modelo, e procura esse equipamento na tabela."
 
     # Conectando
@@ -311,15 +316,14 @@ def achar_equipamento(equip : str) -> None:
     cursor = db.cursor()
 
     if(equip.isdigit()): # É um ID
-        equip = int(equip) # Convertendo pra inteiro
-        cursor.execute("SELECT * FROM equipamentos WHERE rowid = ?", (equip,))
+        cursor.execute("SELECT * FROM equipamentos WHERE rowid = ?", (int(equip),))
     else: # É modelo
         cursor.execute("SELECT * FROM equipamentos WHERE modelo = ?", (equip,))
     search = cursor.fetchone() # Guardando a busca
 
     if search:
         # Rodando pelos valores encontrados e printando
-        for i in search: print(i)
+        return search
     else:
         print("Equipamento não foi encontrado.")
 
@@ -349,7 +353,7 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, estado : str) ->
     db.commit()
     db.close()
 
-def achar_ferramenta(ferramenta : str) -> None:
+def achar_ferramenta(ferramenta : str) -> tuple:
     "Pede ao usuário que insira o ID ou nome do modelo, e procura essa ferramenta na tabela."
 
     # Conectando
@@ -357,15 +361,15 @@ def achar_ferramenta(ferramenta : str) -> None:
     cursor = db.cursor()
 
     if(ferramenta.isdigit()): # É um ID
-        ferramenta = int(ferramenta) # Convertendo pra inteiro
-        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (ferramenta,))
+        ferramenta = ferramenta # Convertendo pra inteiro
+        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (int(ferramenta),))
     else: # É modelo
         cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (ferramenta,))
     search = cursor.fetchone() # Guardando a busca
 
     if search:
         # Rodando pelos valores encontrados e printando
-        for i in search: print(i)
+        return search
     else:
         print("Ferramenta não foi encontrada.")
 
