@@ -308,8 +308,8 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, t
     db.commit()
     db.close()
 
-def achar_equipamento(equip : str) -> tuple:
-    "Pede ao usuário que insira o ID ou nome do modelo, e procura esse equipamento na tabela."
+def achar_equipamento(equip : str) -> tuple | None:
+    "Pede ao usuário que insira o ID ou nome do modelo, procura esse equipamento na tabela e o retorna. Caso não encontre, retorna None."
 
     # Conectando
     db = sql.connect("db/banco.db")
@@ -321,14 +321,10 @@ def achar_equipamento(equip : str) -> tuple:
         cursor.execute("SELECT * FROM equipamentos WHERE modelo = ?", (equip,))
     search = cursor.fetchone() # Guardando a busca
 
-    if search:
-        # Rodando pelos valores encontrados e printando
-        return search
-    else:
-        print("Equipamento não foi encontrado.")
-
     # Desconectando
     db.close()
+
+    return search
 
 # Funções de ferramenta
 def novo_ferramenta(nome : str, modelo : str, fabricante : str, estado : str) -> None:
@@ -353,8 +349,8 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, estado : str) ->
     db.commit()
     db.close()
 
-def achar_ferramenta(ferramenta : str) -> tuple:
-    "Pede ao usuário que insira o ID ou nome do modelo, e procura essa ferramenta na tabela."
+def achar_ferramenta(ferramenta : str) -> tuple | None:
+    "Pede ao usuário que insira o ID ou nome do modelo, procura essa ferramenta na tabela e a retorna. Caso não encontre, retorna None."
 
     # Conectando
     db = sql.connect("db/banco.db")
@@ -367,14 +363,10 @@ def achar_ferramenta(ferramenta : str) -> tuple:
         cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (ferramenta,))
     search = cursor.fetchone() # Guardando a busca
 
-    if search:
-        # Rodando pelos valores encontrados e printando
-        return search
-    else:
-        print("Ferramenta não foi encontrada.")
-
     # Desconectando
     db.close()
+
+    return search
 
 if __name__ == "__main__":
     ...
