@@ -1,11 +1,7 @@
-import sqlite3 as sql
 import pandas as pd
-import streamlit.components.v1 as components
+import mysql.connector as sqlconn
 import streamlit as st
-import os, bcrypt, pathlib
-
-if not pathlib.Path("db").exists(): os.makedirs("db") 
-dbpath = "db/banco.db"
+import os, bcrypt
 
 # Utilitarios
 def string_insert(str, substring, pos) -> str:
@@ -32,49 +28,90 @@ def title(text : str) -> None:
     os.system("cls")
     print(text.center(50, "-"))
 
+def unlogged_redirect() -> None:
+    "Redireciona o usuário até a página inicial caso ele tente entrar em alguma página que necessite de login, mas sem estar logado."
+
+    if not is_logged(st.session_state["logged"]): st.switch_page("pages/home.py")
+
+def not_admin_redirect() -> None:
+    "Redireciona o usuário para a página inicial se ele tentar entrar em alguma aba de administrador sem ter permissão."
+
+    if not st.session_state["logged"].get("admin"): st.switch_page("pages/home.py")
 # Manipular banco
+def get_connection() -> sqlconn.MySQLConnection:
+    "Essa função retorna a conexão com o banco. Se não houver uma conexão feita, uma tentativa de conectar é realizada."
+
+    # Caso a variável ainda não esteja no session state, ou a conexão não estiver sendo feita, o código tenta uma conexão com o banco.
+    if "conn" not in st.session_state or not st.session_state["conn"].is_connected():
+        conn = sqlconn.connect(
+            host="localhost",
+            user="root",
+            password="senhabanco",
+            database="manutencao"
+        )
+        st.session_state["conn"] = conn
+    return st.session_state["conn"]
+
+def close_connection() -> None:
+    "Procura a conexão atual e a encerra se estiver ativa. Ideal para rodar ao fim do programa."
+
+    # Fechando só se a conexão estiver guardada na sessão E ativa.
+    if "conn" in st.session_state:
+        conn = st.session_state["conn"]
+        if conn.is_connected():
+            conn.close()
+            print("Conexão MySQL encerrada.")
+    
 def criar_tabelas() -> None:
     """Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente.
 
     Equipamentos 
-        - Nome (string not null)
-        - Modelo (string not null primary key)
-        - Fabricante (string)
-        - Estado (string)
-        - Tipo de Manutenção (string)
-        - Ferramentas (string)
-        - Periodicidade (inteiro)
+        - ID (INT not null primary key auto_increment)
+        - Nome (VARCHAR(255) not null)
+        - Modelo (VARCHAR(255) not null)
+        - Fabricante (VARCHAR(255) not null)
+        - Estado (VARCHAR(255) not null)
+        - Tipo de Manutenção (VARCHAR(255) not null)
+        - Ferramentas (VARCHAR(255) not null)
+        - Periodicidade (INT not null)
     
     Ferramentas 
-        - Nome (string not null)
-        - Modelo (string not null primary key)
-        - Fabricante (string)
-        - Estado (string)
+        - ID (INT not null primary key auto_increment)
+        - Nome (VARCHAR(255) not null)
+        - Modelo (VARCHAR(255) not null)
+        - Fabricante (VARCHAR(255) not null)
+        - Specs (VARCHAR(255) not null)
 
     Usuários 
-        - Nome (string not null)
-        - Senha (string not null)
-        - Email (string not null primary key)
-        - CPF (inteiro único)
-        - CPF formatado (string)
-        - Administrator (booleano not null)
+        - ID (INT not null primary key auto_increment)
+        - Nome (VARCHAR(255) not null)
+        - Senha (VARCHAR(255) not null)
+        - Email (VARCHAR(255) not null unique)
+        - CPF (VARCHAR(11) not null unique)
+        - Administrator (BOOL not null)
+
+    Registros
+        - ID (INT not unll primary key auto_increment)
+        - IDusuario (INT FK (idusuario))
+        - IDequipamento (INT FK (idequipamento))
+        - Data (DATETIME NOT NULL)
+        - Registro (VARCHAR(10000) NOT NULL)
     """
 
-    # Criando a conexão
-    db = sql.connect(dbpath)
-    cursor = db.cursor()
+    # Criando o cursor
+    cursor = get_connection().cursor()
 
     # Tabela de equipamentos
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS equipamentos(
-            nome TEXT NOT NULL,
-            modelo TEXT NOT NULL PRIMARY KEY,
-            fabricante TEXT,
-            estado TEXT,
-            tipo_manutencao TEXT,
-            ferramentas TEXT,
-            periodo_meses INT
+            idequipamento INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            modelo VARCHAR(255) NOT NULL,
+            fabricante VARCHAR(255) NOT NULL,
+            estado VARCHAR(255) NOT NULL,
+            manutencao VARCHAR(255) NOT NULL,
+            periodo INT NOT NULL
         )
         """
     )
@@ -83,10 +120,11 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS ferramentas(
-            nome TEXT NOT NULL,
-            modelo TEXT NOT NULL PRIMARY KEY,
-            fabricante TEXT,
-            estado TEXT
+            idferramenta INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            modelo VARCHAR(255) NOT NULL,
+            fabricante VARCHAR(255) NOT NULL,
+            specs VARCHAR(255) NOT NULL
         )
         """
     )
@@ -95,46 +133,55 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios(
-            nome TEXT NOT NULL,
-            senha TEXT NOT NULL,
-            email TEXT NOT NULL PRIMARY KEY,
-            cpf INT UNIQUE,
-            cpf_format TEXT,
+            idusuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            senha VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            cpf VARCHAR(11) UNIQUE,
             admin BOOL NOT NULL
         )
         """
     )
 
-    # Salvando as alterações com commit() e fechando conexão.
-    db.commit()
-    db.close()
+    # Tabela de registros
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS registros(
+            idregistro INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            idusuario INT,
+            idequipamento INT,
+            data DATETIME NOT NULL,
+            registro VARCHAR(10000) NOT NULL,
+            FOREIGN KEY (idusuario) REFERENCES usuarios(idusuario),
+            FOREIGN KEY (idequipamento) REFERENCES equipamentos(idequipamento)
+        )
+        """
+    )
+
+    # Salvando as alterações com commit() e fechando o cursor.
+    get_connection().commit()
+    cursor.close()
 
 def limpar_tabela(tabela : str) -> None:
     "Função de debug para limpar uma tabela."
 
     # Criando conexão e cursor
-    db = sql.connect(dbpath)
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
 
     # Limpando
     cursor.execute(f"DELETE FROM {tabela}")
 
-    # Commitando e fechando conexão
-    db.commit()
-    db.close()
+    # Commitando e fechando cursor
+    get_connection().commit()
+    cursor.close()
 
 def mostrar_tabela(tabela : str) -> None:
     "Imprime a tabela escolhida no console"
 
     title(f"TABELA \"{tabela}\"")
-    
-    # Conectando
-    db = sql.connect(dbpath)
 
-    print(pd.DataFrame(pd.read_sql(f"SELECT * FROM {tabela}", db)))
-
-    # Fechando conexão
-    db.close()
+    # Lendo a tabela com pandas para conseguir printar
+    print(pd.DataFrame(pd.read_sql(f"SELECT * FROM {tabela}", get_connection())))
     
 # Funções pra usuário
 def check_cpf(cpf : int) -> int | None:
@@ -188,7 +235,9 @@ def check_email(email : str) -> str | None:
             
             # Verificando se existe local e domínio (antes/depois do @)
             atpos = email.find("@")
-            if(email[:atpos] == "" or email[atpos+1:] == ("" or ".")):
+
+            # Checando se a parte pós-arroba existe ou não começa com espaço ou ponto
+            if(email[atpos+1:] == "" or email[atpos+1] in [" ", "."]):
                 return None
             else:
                 return email
@@ -206,165 +255,181 @@ def format_cpf(cpf : int | str):
 
     return cpf_format
 
-def novo_usuario(nome : str, senha : str, cpf : int, email : str, admin : bool) -> None:
-    "A função vai requisitar todos os dados para criar um usuário, vai verificá-los e adicionar o usuário ao banco caso tudo esteja correto."
+def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) -> None:
+    "A função vai requisitar todos os dados para criar um usuário e adicionará-o ao banco."
 
-    # Criando conexão e cursor
-    db = sql.connect(dbpath)
-    cursor = db.cursor()
+    # Criando cursor
+    cursor = get_connection().cursor()
 
-    # Checando valores
-    cpf_add = check_cpf(cpf)
+    # Hasheando senha
     senha_add = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
 
     # Adicionando o usuário no banco:
     try:
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, senha, email, cpf, cpf_format, admin)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (nome.upper(), senha_add, email, cpf_add, format_cpf(cpf_add), admin)
+            INSERT INTO usuarios (nome, senha, email, cpf, admin)
+            VALUES (%s, %s, %s, %s, %s)
+            """, (nome.upper(), senha_add, email, cpf, admin)
         )
-    except sql.IntegrityError:
-        print("\nErro no registro\nCPF e/ou e-mail já foram registrados.\n")
+    except Exception as e:
+        print(e)
 
     # Commitando e fechando a conexão
-    db.commit()
-    db.close()
+    get_connection().commit()
+    cursor.close()
 
 def login(usuario : str | int, password : str | bytes) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
 
     # Criando conexão pra checar os dados
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
 
     # Checando se o usuário existe
-    cursor.execute("SELECT senha FROM usuarios WHERE nome = ? OR email = ? OR cpf = ?", (usuario.upper(), check_email(usuario), check_cpf(usuario)))
+    cursor.execute("SELECT senha FROM usuarios WHERE nome = %s OR email = %s OR cpf = %s", (usuario.upper(), usuario, usuario))
     search = cursor.fetchone() # Pegando o usuário apenas
-    retorna = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
+    retorno = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
 
-    if search: # existe
+    if search: # algo foi encontrado
 
         # Guardando a senha
         senha = search[0]
 
         # Descriptografando e verificando
-        # comparo as duas séries de bytes, se forem iguais, retorna True (também checo se a senha é uma string ou se já é uma série de bytes)
-        if bcrypt.checkpw(password.encode("utf-8") if type(password) == str else password, senha): 
-            retorna = True
+        # comparo as duas séries de bytes, se forem iguais, retorna True
+        if bcrypt.checkpw(password.encode("utf-8"), senha.encode("utf-8")): 
+            retorno = True
         else:
-            retorna = False
+            retorno = False
     else:
-        retorna = False
+        retorno = False
     
-    # Fechando conexão
-    db.close()
-    return retorna
+    # Fechando cursor
+    cursor.close()
+
+    return retorno
 
 def mudar_senha(usuario : str, password : str) -> None:
     "Muda a senha do usuário desejado. Printa um erro caso o usuário não exista. Só deve ser usada pelo administrador."
 
     # Conectando
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
 
     # Pegando por e-mail ou nome
-    inserido = ""
+    inserido = "nome"
     if check_email(usuario): inserido = "email" # se for um email
-    else: inserido = "nome" # se for um usuário
+    elif check_cpf(usuario): inserido = "cpf" # se for um usuário
 
     # Executando
-    cursor.execute("UPDATE usuarios SET senha = ? WHERE ? = ?", (password, inserido, usuario))
+    cursor.execute("UPDATE usuarios SET senha = %s WHERE %s = %s", (password, inserido, usuario))
 
     # Fechando conexão
-    db.commit()
-    db.close()
+    cursor.commit()
+    cursor.close()
 
 def is_logged(user_session_state : dict) -> bool:
     "Retorna True se todos os valores estiverem preenchidos."
     return None not in user_session_state.values()
 
 # Funções de equipamento
-def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, tipo_manutencao : str, ferramentas : str, periodo : str) -> None:
+def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int) -> None:
     "Pede as informações e adiciona um equipamento ao banco."
     
     # Conectando e criando cursor
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
 
     # Adicionando ao banco
     try:
         cursor.execute(
             """
-            INSERT INTO equipamentos (nome, modelo, fabricante, estado, tipo_manutencao, ferramentas, periodo_meses)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (nome, modelo, fabricante, estado, tipo_manutencao, ferramentas, periodo)
+            INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """, (nome, modelo, fabricante, estado, manutencao, periodo)
         )
-    except sql.IntegrityError:
-        print("\nErro no registro\nModelo já foi registrado.\n")
+    except Exception as e:
+        print(e)
 
     # Commitando e fechando conexão
-    db.commit()
-    db.close()
+    get_connection().commit()
+    cursor.close()
 
-def achar_equipamento(equip : str) -> tuple | None:
+def achar_equipamentos(equip : str) -> tuple | None:
     "Pede ao usuário que insira o ID ou nome do modelo, procura esse equipamento na tabela e o retorna. Caso não encontre, retorna None."
 
     # Conectando
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
+    # As porcentagem dizem ao MySQL para procurar qualquer texto que CONTENHA essa string.
+    termo_pesquisa = f"%{equip}%".lower() # lower() para padronizar a pesquisa
 
     if(equip.isdigit()): # É um ID
-        cursor.execute("SELECT * FROM equipamentos WHERE rowid = ?", (int(equip),))
-    else: # É modelo
-        cursor.execute("SELECT * FROM equipamentos WHERE modelo = ?", (equip,))
-    search = cursor.fetchone() # Guardando a busca
+        cursor.execute("SELECT * FROM equipamentos WHERE idequipamento = %s ORDER BY nome ASC", (int(equip),))
+    else: # É outra coisa
+
+        # O like permite a busca por contenção de texto
+        cursor.execute(
+            """
+            SELECT * FROM equipamentos 
+            WHERE LOWER(nome) LIKE %s OR LOWER(modelo) LIKE %s OR LOWER(fabricante) LIKE %s OR LOWER(estado) LIKE %s
+            ORDER BY nome ASC
+            """,
+            (termo_pesquisa, termo_pesquisa, termo_pesquisa, termo_pesquisa)
+    )
+    search = cursor.fetchall() # Guardando a busca
 
     # Desconectando
-    db.close()
+    cursor.close()
 
     return search
 
 # Funções de ferramenta
-def novo_ferramenta(nome : str, modelo : str, fabricante : str, estado : str) -> None:
+def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str) -> None:
     "Pede as informações e adiciona a ferramenta ao banco."
     
     # Conectando e criando cursor
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor =  get_connection().cursor()
 
     # Adicionando ao banco
     try:
         cursor.execute(
             """
-            INSERT INTO ferramentas (nome, modelo, fabricante, estado)
-            VALUES (?, ?, ?, ?)
-            """, (nome, modelo, fabricante, estado)
+            INSERT INTO ferramentas (nome, modelo, fabricante, specs)
+            VALUES (%s, %s, %s, %s)
+            """, (nome, modelo, fabricante, specs)
         )
-    except sql.IntegrityError:
-        print("\nErro no registro\nModelo já foi registrado.\n")
+    except Exception as e:
+        print(e)
 
-    # Commitando e fechando conexão
-    db.commit()
-    db.close()
+    # Commitando e fechando cursor
+    get_connection().commit()
+    cursor.close()
 
-def achar_ferramenta(ferramenta : str) -> tuple | None:
+def achar_ferramentas(ferramenta : str) -> tuple | None:
     "Pede ao usuário que insira o ID ou nome do modelo, procura essa ferramenta na tabela e a retorna. Caso não encontre, retorna None."
 
     # Conectando
-    db = sql.connect("db/banco.db")
-    cursor = db.cursor()
+    cursor = get_connection().cursor()
+
+    # Criando termo de pesquisa por contenção de texto
+    termo_pesquisa = f"%{ferramenta}%"
 
     if(ferramenta.isdigit()): # É um ID
-        ferramenta = ferramenta # Convertendo pra inteiro
-        cursor.execute("SELECT * FROM ferramentas WHERE rowid = ?", (int(ferramenta),))
-    else: # É modelo
-        cursor.execute("SELECT * FROM ferramentas WHERE modelo = ?", (ferramenta,))
-    search = cursor.fetchone() # Guardando a busca
+        # Buscando e ordenando por ordem crescente
+        cursor.execute("SELECT * FROM equipamentos WHERE idequipamento = %s ORDER BY nome ASC", (int(ferramenta),))
+    else: # É outra coisa
+
+        # O like permite a busca por contenção de texto
+        cursor.execute(
+            """
+            SELECT * FROM equipamentos 
+            WHERE LOWER(nome) LIKE %s OR LOWER(modelo) LIKE %s OR LOWER(fabricante) LIKE %s OR LOWER(specs) LIKE %s
+            ORDER BY nome ASC
+            """,
+            (termo_pesquisa, termo_pesquisa, termo_pesquisa, termo_pesquisa)
+    )
+    search = cursor.fetchall()
 
     # Desconectando
-    db.close()
+    cursor.close()
 
     return search
 

@@ -1,5 +1,4 @@
 import streamlit as st
-import sqlite3 as sql
 from funcoes import *
 
 # Salvando session state em outra variável
@@ -20,7 +19,7 @@ with st.expander("Cadastrar"):
 
     # Quando eu apertar o botão e checar se todos os campos estão preenchidos (menos Admin, esse não é necessário),
     # eu já tento adicionar o usuário após as checagens
-    if(st.button("Cadastrar") and all([nome_c, senha_c, cpf_c, email_c])):
+    if(st.button("Cadastrar") and all([nome_c, senha_c, check_cpf(cpf_c), check_email(email_c)])):
         novo_usuario(nome_c, senha_c, cpf_c, email_c, admin_c)
 
 # Aba de login
@@ -34,25 +33,23 @@ with st.expander("Login"):
     def efetuar_login(nome, senha):
         if(login(nome, senha)):
             # Pegando o nome do usuário que eu acabei de logar
-            db = sql.connect("db/banco.db") 
-            cursor = db.cursor()
+            cursor = get_connection().cursor()
 
             # Pegando o nome via nome, email ou cpf
-            cursor.execute("SELECT nome, admin FROM usuarios WHERE nome = ? OR email = ? OR cpf = ?", (nome.upper(), check_email(nome), check_cpf(nome)))
+            cursor.execute("SELECT nome, admin FROM usuarios WHERE nome = %s OR email = %s OR cpf = %s", (nome.upper(), check_email(nome), check_cpf(nome)))
             search = cursor.fetchone() # Pegando o usuário apenas
 
             # Pop-up de sucesso
             sstate.logged["user"] = search[0]
-            sstate.logged["password"] = senha
             sstate.logged["admin"] = search[1]
 
             # Fechando conexão
-            db.close()
+            cursor.close()
     
     if(st.button("Logar", on_click=efetuar_login, args=(nome_l, senha_l))):
         if(is_logged(sstate.logged)):
             adm_text = "" if not sstate.logged["admin"] else "ADMINISTRADOR "
-            st.success(f"Entrou no usuário {sstate.logged["user"]} {adm_text}com a senha {sstate.logged["password"]}.")
+            st.success(f"Entrou no usuário {sstate.logged["user"]} {adm_text}.")
         else:
             st.error("Não foi possível fazer login. Verifique se as informações inseridas estão corretas.")
 
@@ -64,9 +61,6 @@ with st.container(border=True):
 
     st.caption("Nome")
     st.write(sstate.logged["user"])
-
-    st.caption("Senha")
-    st.write(sstate.logged["password"])
 
     st.caption("Administrador?")
     st.write("Sim" if sstate.logged["admin"] else "Não")
