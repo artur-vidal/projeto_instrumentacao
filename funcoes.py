@@ -1,7 +1,7 @@
 import pandas as pd
 import mysql.connector as sqlconn
 import streamlit as st
-import os, bcrypt
+import os, bcrypt, datetime, uuid, pathlib
 
 # Utilitarios
 def string_insert(str, substring, pos) -> str:
@@ -33,24 +33,62 @@ def unlogged_redirect() -> None:
 
     if not is_logged(st.session_state["logged"]): st.switch_page("pages/home.py")
 
-def not_admin_redirect() -> None:
+def non_admin_redirect() -> None:
     "Redireciona o usuário para a página inicial se ele tentar entrar em alguma aba de administrador sem ter permissão."
 
     if not st.session_state["logged"].get("admin"): st.switch_page("pages/home.py")
+
+def current_datetime() -> datetime.datetime:
+    "Retorna a data e hora de agora, sem os microssegundos."
+    return datetime.datetime.now().replace(microsecond=0)
+
+def generate_filename(extension) -> str:
+    "Gera um nome de arquivo a partir de um UUID v4"
+    return f"{uuid.uuid4()}{extension}"
+
+def upload_image(image : bytes, file_name : str) -> None:
+    "Faz o upload de uma imagem ao servidor."
+
+    # Escrevendo arquivo
+    if not pathlib.Path("uploads/images").exists(): os.makedirs("uploads/images")
+    with open(f"uploads/images/{file_name}", "wb") as f:
+        f.write(image)
+
+def upload_log(log : str, file_name : str) -> None:
+    "Faz o upload de um registro ao servidor."
+
+    # Lendo arquivo
+    with open(text, "rb") as f:
+        text = f.read()
+    
+    # Escrevendo arquivo
+    with open(f"uploads/logs/{file_name}", "wb") as f:
+        f.write(text)
+    
 # Manipular banco
 def get_connection() -> sqlconn.MySQLConnection:
     "Essa função retorna a conexão com o banco. Se não houver uma conexão feita, uma tentativa de conectar é realizada."
 
+    sstate = st.session_state
+    
     # Caso a variável ainda não esteja no session state, ou a conexão não estiver sendo feita, o código tenta uma conexão com o banco.
-    if "conn" not in st.session_state or not st.session_state["conn"].is_connected():
+    if "conn" not in sstate or not sstate["conn"].is_connected():
+
+        # Conectando
         conn = sqlconn.connect(
             host="localhost",
             user="root",
-            password="senhabanco",
-            database="manutencao"
+            password="senhabanco"
         )
-        st.session_state["conn"] = conn
-    return st.session_state["conn"]
+        sstate["conn"] = conn
+
+    # Se eu tiver conseguido a conexão, eu crio o banco e uso ele caso ainda não tenha o feito
+    if sstate["conn"].is_connected():
+        with sstate["conn"].cursor() as cursor:
+            cursor.execute("CREATE DATABASE IF NOT EXISTS manutencao")
+            cursor.execute("USE manutencao")
+
+    return sstate["conn"]
 
 def close_connection() -> None:
     "Procura a conexão atual e a encerra se estiver ativa. Ideal para rodar ao fim do programa."
@@ -72,8 +110,10 @@ def criar_tabelas() -> None:
         - Fabricante (VARCHAR(255) not null)
         - Estado (VARCHAR(255) not null)
         - Tipo de Manutenção (VARCHAR(255) not null)
-        - Ferramentas (VARCHAR(255) not null)
         - Periodicidade (INT not null)
+        - Registrado por (INT not null)
+        - Registrado em (DATETIME not null)
+        - Caminho da Foto (VARCHAR(40))
     
     Ferramentas 
         - ID (INT not null primary key auto_increment)
@@ -81,6 +121,9 @@ def criar_tabelas() -> None:
         - Modelo (VARCHAR(255) not null)
         - Fabricante (VARCHAR(255) not null)
         - Specs (VARCHAR(255) not null)
+        - Registrado por (INT not null)
+        - Registrado em (DATETIME not null)
+        - Caminho da Foto (VARCHAR(40))
 
     Usuários 
         - ID (INT not null primary key auto_increment)
@@ -89,17 +132,34 @@ def criar_tabelas() -> None:
         - Email (VARCHAR(255) not null unique)
         - CPF (VARCHAR(11) not null unique)
         - Administrator (BOOL not null)
+        - Criado em (DATETIME not null)
 
     Registros
         - ID (INT not unll primary key auto_increment)
         - IDusuario (INT FK (idusuario))
         - IDequipamento (INT FK (idequipamento))
-        - Data (DATETIME NOT NULL)
-        - Registro (VARCHAR(10000) NOT NULL)
+        - Data (DATETIME not null)
+        - Prazo (DATETIME not null)
+        - Registro (VARCHAR(10000) not null)
     """
 
     # Criando o cursor
     cursor = get_connection().cursor()
+
+    # Tabela de usuários
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS usuarios(
+            idusuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            senha VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            cpf VARCHAR(11) NOT NULL UNIQUE,
+            admin BOOL NOT NULL,
+            createdwhen DATETIME NOT NULL
+        )
+        """
+    )
 
     # Tabela de equipamentos
     cursor.execute(
@@ -111,7 +171,11 @@ def criar_tabelas() -> None:
             fabricante VARCHAR(255) NOT NULL,
             estado VARCHAR(255) NOT NULL,
             manutencao VARCHAR(255) NOT NULL,
-            periodo INT NOT NULL
+            periodo INT NOT NULL,
+            registeredby INT NOT NULL,
+            registeredwhen DATETIME NOT NULL,
+            fotopath VARCHAR(100),
+            FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
         )
         """
     )
@@ -124,21 +188,11 @@ def criar_tabelas() -> None:
             nome VARCHAR(255) NOT NULL,
             modelo VARCHAR(255) NOT NULL,
             fabricante VARCHAR(255) NOT NULL,
-            specs VARCHAR(255) NOT NULL
-        )
-        """
-    )
-
-    # Tabela de usuários
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS usuarios(
-            idusuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            nome VARCHAR(255) NOT NULL,
-            senha VARCHAR(255) NOT NULL,
-            email VARCHAR(255) NOT NULL UNIQUE,
-            cpf VARCHAR(11) UNIQUE,
-            admin BOOL NOT NULL
+            specs VARCHAR(255) NOT NULL,
+            registeredby INT NOT NULL,
+            registeredwhen DATETIME NOT NULL,
+            fotopath VARCHAR(100),
+            FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
         )
         """
     )
@@ -151,7 +205,8 @@ def criar_tabelas() -> None:
             idusuario INT,
             idequipamento INT,
             data DATETIME NOT NULL,
-            registro VARCHAR(10000) NOT NULL,
+            prazo DATETIME NOT NULL,
+            registropath VARCHAR(100) NOT NULL,
             FOREIGN KEY (idusuario) REFERENCES usuarios(idusuario),
             FOREIGN KEY (idequipamento) REFERENCES equipamentos(idequipamento)
         )
@@ -159,19 +214,6 @@ def criar_tabelas() -> None:
     )
 
     # Salvando as alterações com commit() e fechando o cursor.
-    get_connection().commit()
-    cursor.close()
-
-def limpar_tabela(tabela : str) -> None:
-    "Função de debug para limpar uma tabela."
-
-    # Criando conexão e cursor
-    cursor = get_connection().cursor()
-
-    # Limpando
-    cursor.execute(f"DELETE FROM {tabela}")
-
-    # Commitando e fechando cursor
     get_connection().commit()
     cursor.close()
 
@@ -268,9 +310,9 @@ def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) 
     try:
         cursor.execute(
             """
-            INSERT INTO usuarios (nome, senha, email, cpf, admin)
-            VALUES (%s, %s, %s, %s, %s)
-            """, (nome.upper(), senha_add, email, cpf, admin)
+            INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """, (nome.upper(), senha_add, email, cpf, admin, current_datetime())
         )
     except Exception as e:
         print(e)
@@ -286,7 +328,7 @@ def login(usuario : str | int, password : str | bytes) -> bool:
     cursor = get_connection().cursor()
 
     # Checando se o usuário existe
-    cursor.execute("SELECT senha FROM usuarios WHERE nome = %s OR email = %s OR cpf = %s", (usuario.upper(), usuario, usuario))
+    cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
     search = cursor.fetchone() # Pegando o usuário apenas
     retorno = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
 
@@ -332,19 +374,19 @@ def is_logged(user_session_state : dict) -> bool:
     return None not in user_session_state.values()
 
 # Funções de equipamento
-def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int) -> None:
+def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : str | None = None) -> None:
     "Pede as informações e adiciona um equipamento ao banco."
     
     # Conectando e criando cursor
     cursor = get_connection().cursor()
-
+    
     # Adicionando ao banco
     try:
         cursor.execute(
             """
-            INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """, (nome, modelo, fabricante, estado, manutencao, periodo)
+            INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, fotopath)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.logged["user"], current_datetime(), foto)
         )
     except Exception as e:
         print(e)
@@ -432,6 +474,53 @@ def achar_ferramentas(ferramenta : str) -> tuple | None:
     cursor.close()
 
     return search
+
+# Funções de atualização de pesquisas
+def update_equip():
+
+    # Colocando essa variável no session state se ainda não estiver lá
+    sstate = st.session_state
+    if "equiplist" not in sstate: sstate.equiplist = dict()
+
+    # Fazendo a pesquisa e colocando na lista
+    cursor = get_connection().cursor()
+    cursor.execute(
+        """
+        SELECT nome, idequipamento FROM equipamentos
+        ORDER BY nome ASC
+        """
+    )
+    search = cursor.fetchall()
+
+    # Colocando todos esses valores no dicionário de equipamentos
+    if search:
+        for i in search:
+            sstate.equiplist[i[0]] = i[1]
+    else:
+        sstate.equiplist = dict() # Transformando em um dicionário vazio se não achar nada
+
+def update_myequip():
+    # Colocando essa variável no session state se ainda não estiver lá
+    sstate = st.session_state
+    if "myequiplist" not in sstate: sstate.myequiplist = dict()
+
+    # Fazendo a pesquisa e colocando na lista
+    cursor = get_connection().cursor()
+    cursor.execute(
+        """
+        SELECT nome, idequipamento FROM equipamentos WHERE registeredby = %s
+        ORDER BY nome ASC
+        """, (sstate.logged["user"],)
+    )
+    search = cursor.fetchall()
+
+    # Colocando todos esses valores no dicionário de equipamentos
+    if search:
+        for i in search:
+            sstate.myequiplist[i[0]] = i[1]
+    else:
+        sstate.myequiplist = dict() # Transformando em um dicionário vazio se não achar nada
+
 
 if __name__ == "__main__":
     ...
