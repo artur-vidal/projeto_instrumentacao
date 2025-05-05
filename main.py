@@ -1,13 +1,11 @@
 from funcoes import *
 import streamlit as st
-import atexit
+import atexit, bcrypt
 
 def main():
     # Resumindo sesion state
     sstate = st.session_state
 
-    # Definindo tamanho máximo de arquivo
-    
     # Tentando conectar antes de carregar a página. Levanto um erro se não conseguir conectar.
     try:
         get_connection()
@@ -27,9 +25,29 @@ def main():
         # Criando as tabelas
         criar_tabelas()
 
+        # Criando usuário administrador padrão
+        with get_connection().cursor() as cursor:
+
+            # Aqui eu apenas insiro o usuário padrão se ainda não existir um igual, ou seja, com o mesmo e-mail ou CPF (já que são valores únicos). A sintaxe é bem esquisita.
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
+                SELECT %s, %s, %s, %s, %s, %s
+                FROM DUAL
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM usuarios WHERE email = %s OR cpf = %s
+                )
+                """,
+                ("ADM", bcrypt.hashpw("adminSENAI2025".encode("utf-8"), bcrypt.gensalt()),
+                "admin@admin", "00000000000", True, current_datetime(),
+                "admin@admin", "00000000000")
+            )
+
         # Adicionando outras variáveis no session state
+        if "userinfo" not in sstate:
+            sstate.userinfo = tuple()
         if "logged" not in sstate:
-            sstate.logged = dict(user=None, admin=None)
+            sstate.logged = False
         
         # Páginas
         pages = {
@@ -63,10 +81,10 @@ def main():
 
         # Vendo qual grupo de páginas utilizar
         used_group = None
-        if not is_logged(sstate["logged"]): 
+        if not sstate.logged: 
             used_group = unlogged_page_groups
         else:
-            if sstate["logged"].get("admin"):
+            if sstate.userinfo[1]:
                 used_group = admin_page_groups
             else:
                 used_group = standard_page_groups

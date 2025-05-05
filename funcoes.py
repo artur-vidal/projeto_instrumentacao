@@ -1,5 +1,5 @@
-import pandas as pd
 import mysql.connector as sqlconn
+from mysql.connector import Error
 import streamlit as st
 import os, bcrypt, datetime, uuid, pathlib
 
@@ -15,11 +15,11 @@ def input_notnull(text = "") -> str:
     while var == "": var = input(text)
     return var
 
-def input_choice(text = "", *args : str) -> str:
-    "Pega uma entrada do usuário e filtra baseado nas escolhas que ele passar."
+def input_choice(text = "", options : list = []) -> str:
+    "Pega uma entrada do usuário e só aceita se for uma das escolhas que ele passar."
 
     var = input_notnull(text)
-    while var not in args: var = input_notnull(text)
+    while var not in options and not options == []: var = input_notnull(text)
     return var
 
 def title(text : str) -> None:
@@ -28,43 +28,62 @@ def title(text : str) -> None:
     os.system("cls")
     print(text.center(50, "-"))
 
-def unlogged_redirect() -> None:
-    "Redireciona o usuário até a página inicial caso ele tente entrar em alguma página que necessite de login, mas sem estar logado."
-
-    if not is_logged(st.session_state["logged"]): st.switch_page("pages/home.py")
-
-def non_admin_redirect() -> None:
-    "Redireciona o usuário para a página inicial se ele tentar entrar em alguma aba de administrador sem ter permissão."
-
-    if not st.session_state["logged"].get("admin"): st.switch_page("pages/home.py")
-
 def current_datetime() -> datetime.datetime:
     "Retorna a data e hora de agora, sem os microssegundos."
     return datetime.datetime.now().replace(microsecond=0)
+
+def get_folder_name(path : str) -> str:
+    "Retorna o nome da pasta em que o arquivo está."
+    return os.path.basename(os.path.dirname(path))
 
 def generate_filename(extension) -> str:
     "Gera um nome de arquivo a partir de um UUID v4"
     return f"{uuid.uuid4()}{extension}"
 
-def upload_image(image : bytes, file_name : str) -> None:
-    "Faz o upload de uma imagem ao servidor."
+def upload_file(file_content : bytes, file_path : str) -> None:
+    "Faz o upload de um arquivo ao servidor, dentro da pasta 'uploads'."
 
     # Escrevendo arquivo
-    if not pathlib.Path("uploads/images").exists(): os.makedirs("uploads/images")
-    with open(f"uploads/images/{file_name}", "wb") as f:
-        f.write(image)
+    # Criando pasta uploads se ela ainda não existir
+    if not pathlib.Path("uploads").exists(): os.makedirs("uploads")
 
-def upload_log(log : str, file_name : str) -> None:
-    "Faz o upload de um registro ao servidor."
+    # Criando a pasta especificada
+    imagedir = os.path.dirname(f"uploads/{file_path}")
+    if not os.path.exists(imagedir): os.makedirs(imagedir)
 
-    # Lendo arquivo
-    with open(text, "rb") as f:
-        text = f.read()
-    
-    # Escrevendo arquivo
-    with open(f"uploads/logs/{file_name}", "wb") as f:
-        f.write(text)
-    
+    with open(f"uploads/{file_path}", "wb") as f:
+        f.write(file_content)
+
+def limpar_imagens_inuteis():
+    "Apaga todas as imagens que não estão sendo utilizadas em lugar algum da pasta uploads/imagens"
+
+    # Fazendo várias buscas para guardar todas as imagens que estão sendo utilizadas
+    dirs = []
+
+    # Pegando todas as fotos
+    with get_connection().cursor() as cursor:
+        # Pesquisa
+        cursor.execute(
+            """
+            SELECT fotopath FROM equipamentos
+            UNION
+            SELECT fotopath FROM ferramentas;
+            """
+        )
+        dirs = [i[0] for i in cursor.fetchall()]
+
+    # Apagando todas as imagens que não estiverem na lista
+    for i in os.listdir("uploads/images"):
+        caminho = f"uploads/images/{i}"
+        if(caminho not in dirs): os.remove(caminho)
+
+def get_name_from_equip_id(id : int):
+    "Retorna o nome do equipamento passado. Usado nas selectboxes."
+
+    with get_connection().cursor() as c:
+        c.execute("SELECT nome FROM equipamentos WHERE idequipamento = %s", (id,))
+        return c.fetchone()[0]
+
 # Manipular banco
 def get_connection() -> sqlconn.MySQLConnection:
     "Essa função retorna a conexão com o banco. Se não houver uma conexão feita, uma tentativa de conectar é realizada."
@@ -113,6 +132,7 @@ def criar_tabelas() -> None:
         - Periodicidade (INT not null)
         - Registrado por (INT not null)
         - Registrado em (DATETIME not null)
+        - Modificado em (DATETIME not null)
         - Caminho da Foto (VARCHAR(40))
     
     Ferramentas 
@@ -123,6 +143,7 @@ def criar_tabelas() -> None:
         - Specs (VARCHAR(255) not null)
         - Registrado por (INT not null)
         - Registrado em (DATETIME not null)
+        - Modificado em (DATETIME not null) 
         - Caminho da Foto (VARCHAR(40))
 
     Usuários 
@@ -174,6 +195,7 @@ def criar_tabelas() -> None:
             periodo INT NOT NULL,
             registeredby INT NOT NULL,
             registeredwhen DATETIME NOT NULL,
+            modifiedwhen DATETIME NOT NULL,
             fotopath VARCHAR(100),
             FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
         )
@@ -191,6 +213,7 @@ def criar_tabelas() -> None:
             specs VARCHAR(255) NOT NULL,
             registeredby INT NOT NULL,
             registeredwhen DATETIME NOT NULL,
+            modifiedwhen DATETIME NOT NULL,
             fotopath VARCHAR(100),
             FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
         )
@@ -217,14 +240,6 @@ def criar_tabelas() -> None:
     get_connection().commit()
     cursor.close()
 
-def mostrar_tabela(tabela : str) -> None:
-    "Imprime a tabela escolhida no console"
-
-    title(f"TABELA \"{tabela}\"")
-
-    # Lendo a tabela com pandas para conseguir printar
-    print(pd.DataFrame(pd.read_sql(f"SELECT * FROM {tabela}", get_connection())))
-    
 # Funções pra usuário
 def check_cpf(cpf : int) -> int | None:
     """Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09).
@@ -279,7 +294,7 @@ def check_email(email : str) -> str | None:
             atpos = email.find("@")
 
             # Checando se a parte pós-arroba existe ou não começa com espaço ou ponto
-            if(email[atpos+1:] == "" or email[atpos+1] in [" ", "."]):
+            if(email[atpos+1:] == "" or email[atpos+1] in [" ", "."] or email[-1] in [" ", "."]):
                 return None
             else:
                 return email
@@ -300,37 +315,30 @@ def format_cpf(cpf : int | str):
 def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) -> None:
     "A função vai requisitar todos os dados para criar um usuário e adicionará-o ao banco."
 
-    # Criando cursor
-    cursor = get_connection().cursor()
-
     # Hasheando senha
     senha_add = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
 
-    # Adicionando o usuário no banco:
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """, (nome.upper(), senha_add, email, cpf, admin, current_datetime())
-        )
-    except Exception as e:
-        print(e)
-
-    # Commitando e fechando a conexão
-    get_connection().commit()
-    cursor.close()
+    # Adicionando o usuário no banco
+    get_connection().start_transaction()
+    with get_connection().cursor() as cursor:
+        try:
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """, (nome.upper(), senha_add, email, cpf, admin, current_datetime())
+            )
+            get_connection().commit()
+        except Error as e:
+            get_connection().rollback()
 
 def login(usuario : str | int, password : str | bytes) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
 
-    # Criando conexão pra checar os dados
-    cursor = get_connection().cursor()
-
     # Checando se o usuário existe
-    cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
-    search = cursor.fetchone() # Pegando o usuário apenas
-    retorno = None # Valor de retorno. Faço uma variável pois quero retornar só no fim
+    with get_connection().cursor() as cursor:
+        cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
+        search = cursor.fetchone() # Pegando o usuário apenas
 
     if search: # algo foi encontrado
 
@@ -340,89 +348,65 @@ def login(usuario : str | int, password : str | bytes) -> bool:
         # Descriptografando e verificando
         # comparo as duas séries de bytes, se forem iguais, retorna True
         if bcrypt.checkpw(password.encode("utf-8"), senha.encode("utf-8")): 
-            retorno = True
+            return True
         else:
-            retorno = False
+            return False
     else:
-        retorno = False
-    
-    # Fechando cursor
-    cursor.close()
-
-    return retorno
-
-def mudar_senha(usuario : str, password : str) -> None:
-    "Muda a senha do usuário desejado. Printa um erro caso o usuário não exista. Só deve ser usada pelo administrador."
-
-    # Conectando
-    cursor = get_connection().cursor()
-
-    # Pegando por e-mail ou nome
-    inserido = "nome"
-    if check_email(usuario): inserido = "email" # se for um email
-    elif check_cpf(usuario): inserido = "cpf" # se for um usuário
-
-    # Executando
-    cursor.execute("UPDATE usuarios SET senha = %s WHERE %s = %s", (password, inserido, usuario))
-
-    # Fechando conexão
-    cursor.commit()
-    cursor.close()
-
-def is_logged(user_session_state : dict) -> bool:
-    "Retorna True se todos os valores estiverem preenchidos."
-    return None not in user_session_state.values()
+        return False
 
 # Funções de equipamento
-def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : str | None = None) -> None:
-    "Pede as informações e adiciona um equipamento ao banco."
+def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : tuple | None = None) -> None:
+    "Pede as informações e adiciona um equipamento ao banco. A tupla no argumento foto deve ser composta por (arquivo em bytes, diretório)."
     
     # Conectando e criando cursor
     cursor = get_connection().cursor()
     
     # Adicionando ao banco
-    try:
-        cursor.execute(
-            """
-            INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, fotopath)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.logged["user"], current_datetime(), foto)
-        )
-    except Exception as e:
-        print(e)
+    get_connection().start_transaction()
+    with get_connection().cursor() as cursor:
+        try:
+            cursor.execute(
+                """
+                INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), foto)
+            )
+            get_connection().commit()
+            if(foto): upload_file(foto[0], foto[1])
+        except Error as e:
+            get_connection().rollback()
 
-    # Commitando e fechando conexão
-    get_connection().commit()
-    cursor.close()
+def vizualizar_equipamento(search : tuple):
+    "Função que mostra as informações do equipamento especificado com a busca."
 
-def achar_equipamentos(equip : str) -> tuple | None:
-    "Pede ao usuário que insira o ID ou nome do modelo, procura esse equipamento na tabela e o retorna. Caso não encontre, retorna None."
+    # ID [0] - Nome[1] - Modelo [2] - Fabricante [3] - Estado[4] - Manutenção [5] - Periodo [6] - Registrado por [7] - Registrado em [8] - Última modificação [9] - Caminho da imagem [10]
 
-    # Conectando
-    cursor = get_connection().cursor()
-    # As porcentagem dizem ao MySQL para procurar qualquer texto que CONTENHA essa string.
-    termo_pesquisa = f"%{equip}%".lower() # lower() para padronizar a pesquisa
+    if search[10]: 
+        # Usando colunas para centralizar a imagem
+        lcol, mcol, rcol = st.columns([.2, .6, .2])
+        mcol.image(search[10], use_container_width=True)
 
-    if(equip.isdigit()): # É um ID
-        cursor.execute("SELECT * FROM equipamentos WHERE idequipamento = %s ORDER BY nome ASC", (int(equip),))
-    else: # É outra coisa
+    col1, col2, col3 = st.columns(3,border=True)
+    with col1:
+        st.write(f"Nome: {search[1]}")
+        st.write(f"Modelo: {search[2]}")
+    
+    with col2:
+        st.write(f"Fabricante: {search[3]}")
+        st.write(f"Estado: {search[4]}")
 
-        # O like permite a busca por contenção de texto
-        cursor.execute(
-            """
-            SELECT * FROM equipamentos 
-            WHERE LOWER(nome) LIKE %s OR LOWER(modelo) LIKE %s OR LOWER(fabricante) LIKE %s OR LOWER(estado) LIKE %s
-            ORDER BY nome ASC
-            """,
-            (termo_pesquisa, termo_pesquisa, termo_pesquisa, termo_pesquisa)
-    )
-    search = cursor.fetchall() # Guardando a busca
-
-    # Desconectando
-    cursor.close()
-
-    return search
-
+    with col3:
+        st.write(f"Manutenção: {search[5]}")
+        st.write(f"Periodicidade: {search[6]} meses")
+    
+    # Pesquisando nome de quem registrou e mostrando
+    with get_connection().cursor() as cursor:
+        cursor.execute("SELECT nome FROM usuarios WHERE idusuario = %s", (search[7],))
+        autor = cursor.fetchone()[0]
+    st.write(f"Registrado por: {autor}")
+    st.write(f"Registrado em: {search[8]}")
+    st.write(f"Modificado em: {search[9]}")
+        
 # Funções de ferramenta
 def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str) -> None:
     "Pede as informações e adiciona a ferramenta ao banco."
@@ -431,6 +415,8 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str) -> 
     cursor =  get_connection().cursor()
 
     # Adicionando ao banco
+    get_connection().start_transaction()
+
     try:
         cursor.execute(
             """
@@ -438,89 +424,9 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str) -> 
             VALUES (%s, %s, %s, %s)
             """, (nome, modelo, fabricante, specs)
         )
-    except Exception as e:
-        print(e)
-
-    # Commitando e fechando cursor
-    get_connection().commit()
-    cursor.close()
-
-def achar_ferramentas(ferramenta : str) -> tuple | None:
-    "Pede ao usuário que insira o ID ou nome do modelo, procura essa ferramenta na tabela e a retorna. Caso não encontre, retorna None."
-
-    # Conectando
-    cursor = get_connection().cursor()
-
-    # Criando termo de pesquisa por contenção de texto
-    termo_pesquisa = f"%{ferramenta}%"
-
-    if(ferramenta.isdigit()): # É um ID
-        # Buscando e ordenando por ordem crescente
-        cursor.execute("SELECT * FROM equipamentos WHERE idequipamento = %s ORDER BY nome ASC", (int(ferramenta),))
-    else: # É outra coisa
-
-        # O like permite a busca por contenção de texto
-        cursor.execute(
-            """
-            SELECT * FROM equipamentos 
-            WHERE LOWER(nome) LIKE %s OR LOWER(modelo) LIKE %s OR LOWER(fabricante) LIKE %s OR LOWER(specs) LIKE %s
-            ORDER BY nome ASC
-            """,
-            (termo_pesquisa, termo_pesquisa, termo_pesquisa, termo_pesquisa)
-    )
-    search = cursor.fetchall()
-
-    # Desconectando
-    cursor.close()
-
-    return search
-
-# Funções de atualização de pesquisas
-def update_equip():
-
-    # Colocando essa variável no session state se ainda não estiver lá
-    sstate = st.session_state
-    if "equiplist" not in sstate: sstate.equiplist = dict()
-
-    # Fazendo a pesquisa e colocando na lista
-    cursor = get_connection().cursor()
-    cursor.execute(
-        """
-        SELECT nome, idequipamento FROM equipamentos
-        ORDER BY nome ASC
-        """
-    )
-    search = cursor.fetchall()
-
-    # Colocando todos esses valores no dicionário de equipamentos
-    if search:
-        for i in search:
-            sstate.equiplist[i[0]] = i[1]
-    else:
-        sstate.equiplist = dict() # Transformando em um dicionário vazio se não achar nada
-
-def update_myequip():
-    # Colocando essa variável no session state se ainda não estiver lá
-    sstate = st.session_state
-    if "myequiplist" not in sstate: sstate.myequiplist = dict()
-
-    # Fazendo a pesquisa e colocando na lista
-    cursor = get_connection().cursor()
-    cursor.execute(
-        """
-        SELECT nome, idequipamento FROM equipamentos WHERE registeredby = %s
-        ORDER BY nome ASC
-        """, (sstate.logged["user"],)
-    )
-    search = cursor.fetchall()
-
-    # Colocando todos esses valores no dicionário de equipamentos
-    if search:
-        for i in search:
-            sstate.myequiplist[i[0]] = i[1]
-    else:
-        sstate.myequiplist = dict() # Transformando em um dicionário vazio se não achar nada
-
-
-if __name__ == "__main__":
-    ...
+        get_connection().commit()
+    except Error as e:
+        get_connection().rollback()
+    finally:
+        # Commitando e fechando cursor
+        cursor.close()
