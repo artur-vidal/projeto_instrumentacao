@@ -89,6 +89,12 @@ def main():
             else:
                 used_group = standard_page_groups
 
+        # Mostrando usuário atual
+        if(sstate.logged):
+            with st.sidebar:
+                st.write(f"Usuário: {sstate.userinfo[2]} :balloon:")
+
+
     nav = st.navigation(used_group)
     nav.run()
 

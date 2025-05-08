@@ -9,51 +9,61 @@ sstate = st.session_state
 st.markdown("<h1 style='display: flex; justify-content: center;'>Página Inicial</h1>", unsafe_allow_html=True)
 st.divider()
 
-with st.form("login", border=False):
-    st.markdown("<h3 style='display: flex; justify-content: center;'>Login</h3>", unsafe_allow_html=True)
+if(sstate.logged):
+    def logout():
+        sstate.userinfo = tuple()
+        sstate.logged = False
 
-    usuario = st.text_input("E-mail ou CPF", key="userlogin")
-    senha = st.text_input("Senha", type="password", key="passlogin")
+    st.markdown("<p style='display: flex; justify-content: center; margin: 0; color: gray;'>Logado em:</p>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='display: flex; justify-content: center; margin-bottom: 2rem;'>{sstate.userinfo[2]}</h1>", unsafe_allow_html=True)
+    st.button("Sair", use_container_width=True, on_click=logout)
+else:
+    with st.form("login", border=False):
+        st.markdown("<h3 style='display: flex; justify-content: center;'>Login</h3>", unsafe_allow_html=True)
 
-    if st.form_submit_button("Fazer login"):
+        usuario = st.text_input("E-mail ou CPF", key="userlogin")
+        senha = st.text_input("Senha", type="password", key="passlogin")
 
-        # Faço as verificações todos os campos forem preenchidos
-        if(all([usuario, senha])):
+        if st.form_submit_button("Fazer login"):
 
-            # Verificando se é e-mail ou CPF
-            if(check_email(usuario) or check_cpf(usuario)):
+            # Faço as verificações todos os campos forem preenchidos
+            if(all([usuario, senha])):
 
-                # Tentando fazer login
-                if(login(usuario, senha)):
+                # Verificando se é e-mail ou CPF
+                if(check_email(usuario) or check_cpf(usuario)):
+
+                    # Tentando fazer login
+                    if(login(usuario, senha)):
+                        
+                        # Criando cursor
+                        cursor = get_connection().cursor()
+
+                        # Buscando os dados desse usuário
+                        cursor.execute("SELECT idusuario, admin, nome FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
+                        search = cursor.fetchone()
+                        cursor.close()
+
+                        # Guardando no session state
+                        sstate.userinfo = search
+                        sstate.logged = True
+
+                        # Mensagem de login
+                        adm_text = "" if not search[1] else " ADMINISTRADOR"
+                        st.success(f"Logado no usuário {search[2]}{adm_text}.")
+                        with st.spinner(""):
+                            time.sleep(3)
+                            st.rerun()
                     
-                    # Criando cursor
-                    cursor = get_connection().cursor()
+                    else:
+                        st.error("Não foi possível fazer login. Verifique todas as informações.")
 
-                    # Buscando os dados desse usuário
-                    cursor.execute("SELECT idusuario, admin, nome FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
-                    search = cursor.fetchone()
-
-                    # Guardando no session state
-                    sstate.userinfo = search
-                    sstate.logged = True
-
-                    # Mensagem de login
-                    adm_text = "" if not search[1] else " ADMINISTRADOR"
-                    st.success(f"Logado no usuário {search[2]}{adm_text}.")
-                    with st.spinner(""):
-                        time.sleep(3)
-                        st.rerun()
-                
+                        
+                # Se o dado estiver inválido, eu dou um erro
                 else:
-                    st.error("Não foi possível fazer login. Verifique todas as informações.")
-
-                    
-            # Se o dado estiver inválido, eu dou um erro
+                    st.error("Seu e-mail ou CPF inserido é inválido. Verifique se as informações estão corretas.")
+            # Se faltarem campos a serem preenchidos, eu aviso o usuário
             else:
-                st.error("Seu e-mail ou CPF inserido é inválido. Verifique se as informações estão corretas.")
-        # Se faltarem campos a serem preenchidos, eu aviso o usuário
-        else:
-            st.warning("Preencha todos os campos")
+                st.warning("Preencha todos os campos")
 
 # Botão de sobre nós
 # Criando o dialog de "sobre nós"

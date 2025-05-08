@@ -75,7 +75,7 @@ def limpar_imagens_inuteis():
     # Apagando todas as imagens que não estiverem na lista
     for i in os.listdir("uploads/images"):
         caminho = f"uploads/images/{i}"
-        if(caminho not in dirs): os.remove(caminho)
+        if(caminho not in dirs and os.path.exists(caminho)): os.remove(i)
 
 def get_name_from_equip_id(id : int):
     "Retorna o nome do equipamento passado. Usado nas selectboxes."
@@ -369,7 +369,7 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
                 """
                 INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), foto)
+                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}")
             )
             get_connection().commit()
             if(foto): upload_file(foto[0], foto[1])
