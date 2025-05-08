@@ -48,8 +48,8 @@ def upload_file(file_content : bytes, file_path : str) -> None:
     if not pathlib.Path("uploads").exists(): os.makedirs("uploads")
 
     # Criando a pasta especificada
-    imagedir = os.path.dirname(f"uploads/{file_path}")
-    if not os.path.exists(imagedir): os.makedirs(imagedir)
+    filedir = os.path.dirname(f"uploads/{file_path}")
+    if not os.path.exists(filedir): os.makedirs(filedir)
 
     with open(f"uploads/{file_path}", "wb") as f:
         f.write(file_content)
@@ -75,7 +75,7 @@ def limpar_imagens_inuteis():
     # Apagando todas as imagens que não estiverem na lista
     for i in os.listdir("uploads/images"):
         caminho = f"uploads/images/{i}"
-        if(caminho not in dirs and os.path.exists(caminho)): os.remove(i)
+        if(caminho not in dirs and os.path.exists(caminho)): os.remove(caminho)
 
 def get_name_from_equip_id(id : int):
     "Retorna o nome do equipamento passado. Usado nas selectboxes."
@@ -383,8 +383,12 @@ def vizualizar_equipamento(search : tuple):
 
     if search[10]: 
         # Usando colunas para centralizar a imagem
-        lcol, mcol, rcol = st.columns([.2, .6, .2])
-        mcol.image(search[10], use_container_width=True)
+        try:
+            lcol, mcol, rcol = st.columns([.2, .6, .2])
+            mcol.image(search[10], use_container_width=True)
+        except Exception as e:
+            st.error(":warning: Não foi possível carregar a imagem.")
+            print(e)
 
     col1, col2, col3 = st.columns(3,border=True)
     with col1:

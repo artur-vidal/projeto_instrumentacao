@@ -44,15 +44,15 @@ def editar_equip(equipid : int):
                     cursor.execute("SELECT fotopath FROM equipamentos WHERE idequipamento = %s", (equipid,))
                     search = cursor.fetchone()
                     
-                    with st.spinner(None):
-                        time.sleep(3)
+                    with st.spinner(""):
                         st.write(search)
+                        time.sleep(3)
                     
                     os.remove(search[0])
 
                     # Guardando no banco de dados
                     extensao = pathlib.Path(imagem_e.name).suffix
-                    nome_arquivo = f"images/{generate_filename(extensao)}"
+                    nome_arquivo = generate_filename(extensao)
                     
                     get_connection().start_transaction()
                     try:
@@ -64,7 +64,7 @@ def editar_equip(equipid : int):
                         get_connection().commit()
 
                         # Fazendo o upload
-                        upload_file(imagem_e.read(), nome_arquivo)
+                        upload_file(imagem_e.read(), f"images/{nome_arquivo}")
                     except:
                         get_connection().rollback()
 
@@ -179,11 +179,14 @@ with tab2:
 # Equipamentos do usuário
 with tab3:
     with get_connection().cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT idequipamento FROM equipamentos WHERE registeredby = %s
-            """, (sstate.userinfo[0],)
-        )
+        if(sstate.userinfo[1]):
+            cursor.execute("SELECT idequipamento FROM equipamentos ORDER BY modifiedwhen ASC")
+        else:
+            cursor.execute(
+                """
+                SELECT idequipamento FROM equipamentos WHERE registeredby = %s ORDER BY modifiedwhen ASC
+                """, (sstate.userinfo[0],)
+            )
         search = cursor.fetchall()
 
     if search:
@@ -192,6 +195,8 @@ with tab3:
         myselected = st.selectbox("Lista de equipamentos", myequips, key="equiplist2", format_func=get_name_from_equip_id)
     else:
         myselected = st.selectbox("Lista de equipamentos", None, placeholder="Nenhum equipamento.", key="equiplist2")
+
+    if(sstate.userinfo[1]): st.caption("Mostrando todos os equipamentos.")
 
     # Botões
     btn1, btn2 = st.columns(2)

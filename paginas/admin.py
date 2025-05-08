@@ -4,7 +4,7 @@ from funcoes import *
 st.title("Painel do Administrador")
 
 # Cadastrar novo usuário
-@st.dialog("cadastro")
+@st.dialog("Cadastro")
 def cadastrar():
     with st.form("cadastro"):
         
