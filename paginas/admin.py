@@ -37,6 +37,9 @@ def cadastrar():
 st.button("Cadastrar novo usuário", on_click=cadastrar)
 st.caption("Abre um pop-up para cadastrar um novo usuário.")
 
+# Paro de renderizar a partir daqui se o usuário for o admin
+if sstate.userinfo[0] == 1: st.stop()
+
 # Limpar imagens inutilizadas
 st.button("Limpar imagens inutilizadas", on_click=limpar_imagens_inuteis)
 st.caption("Apaga as imagens salvas que não estão sendo usadas em lugar algum.")

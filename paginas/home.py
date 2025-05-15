@@ -13,6 +13,9 @@ if(sstate.logged):
     st.markdown("<p style='display: flex; justify-content: center; margin: 0; color: gray;'>Logado em:</p>", unsafe_allow_html=True)
     st.markdown(f"<h1 style='display: flex; justify-content: center; margin-bottom: 2rem;'>{sstate.userinfo[2]}</h1>", unsafe_allow_html=True)
     st.button("Sair", use_container_width=True, on_click=logout)
+    
+    if sstate.userinfo[0] == 1: # usuário ADMIN
+        st.warning(":warning: Você está no usuário administrador padrão. Crie um usuário na aba \"Admin\" antes de utilizar as funções do site.")
 else:
     with st.form("login", border=False):
         st.markdown("<h3 style='display: flex; justify-content: center;'>Login</h3>", unsafe_allow_html=True)

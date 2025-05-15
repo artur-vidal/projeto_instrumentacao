@@ -92,6 +92,14 @@ def main():
                 used_group = admin_page_groups
             else:
                 used_group = standard_page_groups
+        
+        # Usando um grupo reduzido se eu estiver no usuário padrão
+        if sstate.logged:
+            if sstate.userinfo[0] == 1:
+                used_group = {
+                    "Inicial" : [pages["inicial"]],
+                    "Admin" : [pages["admin"]]
+                }
 
         # Mostrando usuário atual
         if(sstate.logged):

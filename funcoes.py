@@ -285,6 +285,8 @@ def limpar_imagens_inuteis() -> None:
         )
         dirs = [i[0] for i in cursor.fetchall()]
 
+    # Criando pastas se não existirem
+    if not os.path.exists("uploads/images"): os.makedirs("uploads/images")
     # Apagando todas as imagens que não estiverem na lista
     for i in os.listdir("uploads/images"):
         caminho = f"uploads/images/{i}"
