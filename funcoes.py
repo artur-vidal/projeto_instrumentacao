@@ -3,30 +3,241 @@ from mysql.connector import Error
 import streamlit as st
 import os, bcrypt, datetime, uuid, pathlib
 
+dbconfig = {
+    "host" : "localhost",
+    "user" : "root",
+    "password" : "senhabanco"
+}
+
+# Classes
+class Usuario():
+    "Guarda todas as informações de um usuário. Precisa de um ID."
+
+    # Inicializando
+    def __init__(self, id : int):
+        self.id : int = id
+        self.nome : str = None
+        self.email : str = None
+        self.cpf : str = None
+        self.admin : bool = None
+
+        self.loaded : bool = False
+
+    def __str__(self):
+        if self.loaded:
+            return f"""
+                    ID: {self.id}\n
+                    Nome: {self.nome},\n
+                    E-mail: {self.nome},\n
+                    CPF: {self.nome},\n
+                    Administrador: {"Sim" if self.admin else "Não"}
+                    """
+        else:
+            return "O usuário ainda não foi carregado."
+
+    def load_info(self):
+        "Carrega do banco as informações do usuário baseado no id."
+        
+        # Rodando query
+        with get_connection().cursor() as cursor:
+            cursor.execute("SELECT nome, email, cpf, admin FROM usuarios WHERE id = %s", (self.id,))
+            search = cursor.fetchone()
+
+        # Guardando na classe
+        if search:
+            self.nome = search[0]
+            self.email = search[1]
+            self.cpf = search[2]
+            self.admin = search[3]
+
+            self.loaded = True
+
+class Equipamento():
+    "Guarda todas as informações de um equipamento. Precisa de um ID."
+
+    # Inicializando
+    def __init__(self, id : int):
+        self.id : int = id
+        self.nome : str = None
+        self.modelo : str = None
+        self.fabricante : str = None
+        self.estado : str = None
+        self.manucentao : str = None
+        self.periodo : int = None
+        self.registeredby : int = None
+        self.registeredwhen : datetime.datetime = None
+        self.modifiedwhen : datetime.datetime = None
+        self.fotopath : str = None
+
+        # Guardando uma variável com o nome do autor do equipamento
+        self.nome_autor : str = None
+
+        self.loaded : bool = False
+
+    def __str__(self):
+            if self.loaded:
+                return f"""
+                        ID: {self.id}\n
+                        Nome: {self.nome},
+                        Modelo: {self.modelo},
+                        Fabricante: {self.fabricante},
+                        Estado: {self.estado},
+                        Tipo de Manutenção: {self.manucentao},
+                        Periodicidade em meses: {self.periodo}\n
+                        Registrado por: {self.nome_autor} (ID {self.registeredby}),
+                        Registrado em: {self.registeredwhen},
+                        Última modificação em: {self.modifiedwhen}\n
+                        Caminho da foto: {self.fotopath}
+                        """
+            else:
+                return "O equipamento ainda não foi carregado."
+    
+    def load_info(self):
+        "Carrega do banco as informações do equipamento baseado no seu id."
+        
+        # Rodando query
+        with get_connection().cursor() as cursor:
+            cursor.execute("SELECT nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath FROM equipamentos WHERE id = %s", (self.id,))
+            search = cursor.fetchone()
+
+        # Guardando na classe
+        if search:
+            self.nome = search[0]
+            self.modelo = search[1]
+            self.fabricante = search[2]
+            self.estado = search[3]
+            self.manucentao = search[4]
+            self.periodo = search[5]
+            self.registeredby = search[6]
+            self.registeredwhen = search[7]
+            self.modifiedwhen = search[8]
+            self.fotopath = search[9]
+            self.nome_autor = get_single_info_by_id(self.registeredby, "usuarios", "nome")
+
+            self.loaded = True
+
+class Ferramenta():
+    "Guarda todas as informações de uma ferramenta. Precisa de um ID."
+
+    # Inicializando
+    def __init__(self, id : int):
+        self.id : int = id
+        self.nome : str = None
+        self.modelo : str = None
+        self.fabricante : str = None
+        self.specs : str = None
+        self.registeredby : int = None
+        self.registeredwhen : datetime.datetime = None
+        self.modifiedwhen : datetime.datetime = None
+        self.fotopath : str = None
+
+        # Guardando uma variável com o nome do autor do equipamento
+        self.nome_autor : str = None
+
+        self.loaded : bool = False
+
+    def __str__(self):
+            if self.loaded:
+                return f"""
+                        ID: {self.id}\n
+                        Nome: {self.nome},\n
+                        Modelo: {self.modelo},\n
+                        Fabricante: {self.fabricante},\n
+                        Especificações: {self.specs}\n
+                        Registrado por: {self.nome_autor} (ID {self.registeredby}),
+                        Registrado em: {self.registeredwhen},
+                        Última modificação em: {self.modifiedwhen}\n
+                        Caminho da foto: {self.fotopath}
+                        """
+            else:
+                return "A ferramenta ainda não foi carregada."
+            
+    def load_info(self):
+        "Carrega do banco as informações do equipamento baseado no seu id."
+        
+        # Rodando query
+        with get_connection().cursor() as cursor:
+            cursor.execute("SELECT nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedwhen, fotopath FROM ferramentas WHERE id = %s", (self.id,))
+            search = cursor.fetchone()
+
+        # Guardando na classe se houver encontrado
+        if search:
+            self.nome = search[0]
+            self.modelo = search[1]
+            self.fabricante = search[2]
+            self.specs = search[3]
+            self.registeredby = search[4]
+            self.registeredwhen = search[5]
+            self.modifiedwhen = search[6]
+            self.fotopath = search[7]
+            self.nome_autor = get_single_info_by_id(self.registeredby, "usuarios", "nome")
+
+            self.loaded = True
+
+class Registro():
+    "Guarda todas as informações sobre um registro. Precisa de um ID."
+
+    # Inicializando
+    def __init__(self, id):
+        self.id : int = id
+        self.registeredby : int = None
+        self.idequipamento : int = None
+        self.data : datetime.datetime = None
+        self.registro : str = None
+        self.fotos : list[str] = None
+
+        # Guardando o nome do autor e do equipamento
+        self.nome_autor : str = None
+        self.nome_equipamento : str = None
+
+        self.loaded : bool = False
+
+    def __str__(self):
+            if self.loaded:
+                return f"""
+                        ID: {self.id}\n
+                        Autor: {self.nome_autor} (ID {self.registeredby}),
+                        Equipamento: {self.nome_equipamento} (ID {self.idequipamento}),
+                        Registrado em: {self.data}\n
+                        Caminhos de imagem: {self.fotos}\n
+                        Registro: {self.registro}
+                        """
+            else:
+                return "O registro ainda não foi carregada."
+            
+    def load_info(self):
+        # Rodando queries
+        with get_connection().cursor() as cursor:
+            cursor.execute("SELECT registeredby, idequipamento, data, registro FROM registros WHERE id = %s", (self.id,))
+            infosearch = cursor.fetchone()
+
+            # Pegando as fotos
+            cursor.execute("SELECT fotopath FROM fotos_registros WHERE idregistro = %s", (self.id,))
+            fotosearch = cursor.fetchall()
+        
+        # Adicionando informações
+        if infosearch:
+            self.registeredby = infosearch[0]
+            self.idequipamento = infosearch[1]
+            self.data = infosearch[2]
+            self.registro = infosearch[3]
+
+            self.nome_autor = get_single_info_by_id(self.registeredby, "usuarios", "nome")
+            self.nome_equipamento = get_single_info_by_id(self.idequipamento, "equipamentos", "nome")
+
+            self.loaded = True
+
+            if fotosearch:
+                self.fotos = [i[0] for i in fotosearch]
+
 # Utilitarios
 def string_insert(str, substring, pos) -> str:
     "Insere uma substring dentro da string passada na posição passada, e retorna o resultado."
     return str[:pos] + substring + str[pos+len(substring)-1:]
 
-def input_notnull(text = "") -> str:
-    "Igual a um input(), mas não aceita valores vazios."
-
-    var = input(text)
-    while var == "": var = input(text)
-    return var
-
-def input_choice(text = "", options : list = []) -> str:
-    "Pega uma entrada do usuário e só aceita se for uma das escolhas que ele passar."
-
-    var = input_notnull(text)
-    while var not in options and not options == []: var = input_notnull(text)
-    return var
-
-def title(text : str) -> None:
-    "Limpa o console e printa uma linha de título."
-
-    os.system("cls")
-    print(text.center(50, "-"))
+def format_time(time : datetime.datetime) -> str:
+    "Formata a data em formato 'dia/mês/ano às hora:minuto:segundo'"
+    return time.strftime("%d/%m/%Y às %H:%M:%S")
 
 def current_datetime() -> datetime.datetime:
     "Retorna a data e hora de agora, sem os microssegundos."
@@ -54,7 +265,7 @@ def upload_file(file_content : bytes, file_path : str) -> None:
     with open(f"uploads/{file_path}", "wb") as f:
         f.write(file_content)
 
-def limpar_imagens_inuteis():
+def limpar_imagens_inuteis() -> None:
     "Apaga todas as imagens que não estão sendo utilizadas em lugar algum da pasta uploads/imagens"
 
     # Fazendo várias buscas para guardar todas as imagens que estão sendo utilizadas
@@ -67,7 +278,9 @@ def limpar_imagens_inuteis():
             """
             SELECT fotopath FROM equipamentos
             UNION
-            SELECT fotopath FROM ferramentas;
+            SELECT fotopath FROM ferramentas
+            UNION
+            SELECT fotopath FROM fotos_registros
             """
         )
         dirs = [i[0] for i in cursor.fetchall()]
@@ -77,12 +290,13 @@ def limpar_imagens_inuteis():
         caminho = f"uploads/images/{i}"
         if(caminho not in dirs and os.path.exists(caminho)): os.remove(caminho)
 
-def get_name_from_equip_id(id : int):
-    "Retorna o nome do equipamento passado. Usado nas selectboxes."
+def get_single_info_by_id(id : int, table : str, column : str):
+    "Retorna um dado baseado no id especificado."
 
-    with get_connection().cursor() as c:
-        c.execute("SELECT nome FROM equipamentos WHERE idequipamento = %s", (id,))
-        return c.fetchone()[0]
+    with get_connection().cursor() as cursor:
+        cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", (id,))
+        search = cursor.fetchone()
+        return search[0] if search else None
 
 # Manipular banco
 def get_connection() -> sqlconn.MySQLConnection:
@@ -94,11 +308,7 @@ def get_connection() -> sqlconn.MySQLConnection:
     if "conn" not in sstate or not sstate["conn"].is_connected():
 
         # Conectando
-        conn = sqlconn.connect(
-            host="localhost",
-            user="root",
-            password="senhabanco"
-        )
+        conn = sqlconn.connect(**dbconfig)
         sstate["conn"] = conn
 
     # Se eu tiver conseguido a conexão, eu crio o banco e uso ele caso ainda não tenha o feito
@@ -160,7 +370,6 @@ def criar_tabelas() -> None:
         - IDusuario (INT FK (idusuario))
         - IDequipamento (INT FK (idequipamento))
         - Data (DATETIME not null)
-        - Prazo (DATETIME not null)
         - Registro (VARCHAR(10000) not null)
     """
 
@@ -171,13 +380,14 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios(
-            idusuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
             nome VARCHAR(255) NOT NULL,
             senha VARCHAR(255) NOT NULL,
             email VARCHAR(255) NOT NULL UNIQUE,
             cpf VARCHAR(11) NOT NULL UNIQUE,
             admin BOOL NOT NULL,
-            createdwhen DATETIME NOT NULL
+            createdwhen DATETIME NOT NULL,
+            enabled BOOL NOT NULL
         )
         """
     )
@@ -186,7 +396,7 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS equipamentos(
-            idequipamento INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
             nome VARCHAR(255) NOT NULL,
             modelo VARCHAR(255) NOT NULL,
             fabricante VARCHAR(255) NOT NULL,
@@ -197,7 +407,7 @@ def criar_tabelas() -> None:
             registeredwhen DATETIME NOT NULL,
             modifiedwhen DATETIME NOT NULL,
             fotopath VARCHAR(100),
-            FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
+            FOREIGN KEY (registeredby) REFERENCES usuarios(id)
         )
         """
     )
@@ -206,16 +416,16 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS ferramentas(
-            idferramenta INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
             nome VARCHAR(255) NOT NULL,
             modelo VARCHAR(255) NOT NULL,
             fabricante VARCHAR(255) NOT NULL,
-            specs VARCHAR(255) NOT NULL,
+            specs VARCHAR(2048) NOT NULL,
             registeredby INT NOT NULL,
             registeredwhen DATETIME NOT NULL,
             modifiedwhen DATETIME NOT NULL,
             fotopath VARCHAR(100),
-            FOREIGN KEY (registeredby) REFERENCES usuarios(idusuario)
+            FOREIGN KEY (registeredby) REFERENCES usuarios(id)
         )
         """
     )
@@ -224,14 +434,23 @@ def criar_tabelas() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS registros(
-            idregistro INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            idusuario INT,
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            registeredby INT NOT NULL,
             idequipamento INT,
             data DATETIME NOT NULL,
-            prazo DATETIME NOT NULL,
-            registropath VARCHAR(100) NOT NULL,
-            FOREIGN KEY (idusuario) REFERENCES usuarios(idusuario),
-            FOREIGN KEY (idequipamento) REFERENCES equipamentos(idequipamento)
+            registro VARCHAR(2000),
+            FOREIGN KEY (registeredby) REFERENCES usuarios(id),
+            FOREIGN KEY (idequipamento) REFERENCES equipamentos(id)
+        )
+        """
+    )
+
+    # Tabela das fotos de registros
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fotos_registros(
+            idregistro INT NOT NULL,
+            fotopath VARCHAR(100)
         )
         """
     )
@@ -319,118 +538,247 @@ def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) 
     senha_add = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
 
     # Adicionando o usuário no banco
-    get_connection().start_transaction()
-    with get_connection().cursor() as cursor:
-        try:
+    try:
+        get_connection().start_transaction()
+
+        with get_connection().cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """, (nome.upper(), senha_add, email, cpf, admin, current_datetime())
+                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (nome.upper(), senha_add, email, cpf, admin, current_datetime(), True)
             )
-            get_connection().commit()
-        except Error as e:
-            get_connection().rollback()
+        get_connection().commit()
+    except Error as e:
+        get_connection().rollback()
+        print(e)
 
 def login(usuario : str | int, password : str | bytes) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
 
     # Checando se o usuário existe
     with get_connection().cursor() as cursor:
-        cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
+        cursor.execute("SELECT senha, enabled FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
         search = cursor.fetchone() # Pegando o usuário apenas
 
     if search: # algo foi encontrado
+        if search[1]: # está ativado
+            # Guardando a senha
+            senha = search[0]
 
-        # Guardando a senha
-        senha = search[0]
-
-        # Descriptografando e verificando
-        # comparo as duas séries de bytes, se forem iguais, retorna True
-        if bcrypt.checkpw(password.encode("utf-8"), senha.encode("utf-8")): 
-            return True
-        else:
-            return False
+            # Descriptografando e verificando
+            # comparo as duas séries de bytes, se forem iguais, retorna True
+            if bcrypt.checkpw(password.encode("utf-8"), senha.encode("utf-8")): 
+                return True
+            else:
+                return False
     else:
         return False
+
+def logout() -> None:
+    "Sai do usuário atual."
+
+    st.session_state.userinfo = tuple()
+    st.session_state.logged = False
 
 # Funções de equipamento
 def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : tuple | None = None) -> None:
     "Pede as informações e adiciona um equipamento ao banco. A tupla no argumento foto deve ser composta por (arquivo em bytes, diretório)."
     
-    # Conectando e criando cursor
-    cursor = get_connection().cursor()
-    
     # Adicionando ao banco
-    get_connection().start_transaction()
-    with get_connection().cursor() as cursor:
-        try:
+    try:
+        get_connection().start_transaction()
+
+        with get_connection().cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}")
+                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
-            get_connection().commit()
-            if(foto): upload_file(foto[0], foto[1])
-        except Error as e:
-            get_connection().rollback()
+        get_connection().commit()
+        if(foto): upload_file(foto[0], foto[1])
+    except Error as e:
+        get_connection().rollback()
+        print(e)
 
-def vizualizar_equipamento(search : tuple):
+def show_basic_equip_info(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : str) -> None:
+    "Exibe as informações básicas do equipamento."
+    
+    # Aplicando sombrinha em baixo das colunas
+    col1, col2, col3 = st.columns(3, border=True)
+    
+    col1.write(f"Nome: {nome}")
+    col1.write(f"Modelo: {modelo}")
+
+    col2.write(f"Fabricante: {fabricante}")
+    col2.write(f"Estado: {estado}")
+
+    col3.write(f"Manutenção: {manutencao}")
+    if periodo > 1: col3.write(f"Periodicidade: {periodo} em {periodo} {"mês" if periodo == 1 else "meses"}")
+    else: col3.write("Periodicidade: Todo mês")
+
+def vizualizar_equipamento(equip : Equipamento):
     "Função que mostra as informações do equipamento especificado com a busca."
 
-    # ID [0] - Nome[1] - Modelo [2] - Fabricante [3] - Estado[4] - Manutenção [5] - Periodo [6] - Registrado por [7] - Registrado em [8] - Última modificação [9] - Caminho da imagem [10]
-
-    if search[10]: 
+    if equip.fotopath: 
         # Usando colunas para centralizar a imagem
         try:
             lcol, mcol, rcol = st.columns([.2, .6, .2])
-            mcol.image(search[10], use_container_width=True)
+            mcol.image(equip.fotopath, use_container_width=True)
         except Exception as e:
             st.error(":warning: Não foi possível carregar a imagem.")
             print(e)
-
-    col1, col2, col3 = st.columns(3,border=True)
-    with col1:
-        st.write(f"Nome: {search[1]}")
-        st.write(f"Modelo: {search[2]}")
     
-    with col2:
-        st.write(f"Fabricante: {search[3]}")
-        st.write(f"Estado: {search[4]}")
+    show_basic_equip_info(equip.nome, equip.modelo, equip.fabricante, equip.estado, equip.manucentao, equip.periodo)
+    if not equip.fotopath: 
+        st.caption("Nenhuma imagem encontrada.")
+        st.divider()
 
-    with col3:
-        st.write(f"Manutenção: {search[5]}")
-        st.write(f"Periodicidade: {search[6]} meses")
-    
     # Pesquisando nome de quem registrou e mostrando
-    with get_connection().cursor() as cursor:
-        cursor.execute("SELECT nome FROM usuarios WHERE idusuario = %s", (search[7],))
-        autor = cursor.fetchone()[0]
-    st.write(f"Registrado por: {autor}")
-    st.write(f"Registrado em: {search[8]}")
-    st.write(f"Modificado em: {search[9]}")
+    st.write(f"Registrado por: {equip.nome_autor}")
+    st.write(f"Registrado em: {format_time(equip.registeredwhen)}")
+    st.write(f"Modificado em: {format_time(equip.modifiedwhen)}")
         
 # Funções de ferramenta
-def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str) -> None:
-    "Pede as informações e adiciona a ferramenta ao banco."
+def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, foto : tuple | None = None) -> None:
+    "Pede as informações e adiciona a ferramenta ao banco. A tupla da foto deve conter (arquivo em bytes, diretório)"
     
-    # Conectando e criando cursor
-    cursor =  get_connection().cursor()
-
     # Adicionando ao banco
-    get_connection().start_transaction()
-
     try:
-        cursor.execute(
-            """
-            INSERT INTO ferramentas (nome, modelo, fabricante, specs)
-            VALUES (%s, %s, %s, %s)
-            """, (nome, modelo, fabricante, specs)
-        )
+        get_connection().start_transaction()
+
+        with get_connection().cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO ferramentas (nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedwhen, fotopath)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (nome, modelo, fabricante, specs, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
+            )
         get_connection().commit()
+        if(foto): upload_file(foto[0], foto[1])
     except Error as e:
         get_connection().rollback()
-    finally:
-        # Commitando e fechando cursor
-        cursor.close()
+        print(e)
+
+def show_basic_tool_info(nome : str, modelo : str, fabricante : str, specs : str) -> None:
+    "Exibe as informações básicas do equipamento."
+
+    st.subheader("Informações", divider="gray")
+    st.text(f"Nome: {nome}\nModelo: {modelo}\nFabricante: {fabricante}")
+    
+    st.subheader("Especificações", divider="gray")
+    st.text(specs)
+    
+def vizualizar_ferramenta(tool : Ferramenta):
+    "Função que mostra as informações da ferramenta especificado com a busca."
+
+    if(tool.fotopath):
+        col1, col2 = st.columns(2, border=True, vertical_alignment="center")
+
+        with col1:
+            # Usando colunas para centralizar a imagem
+            try:
+                st.image(tool.fotopath, use_container_width=True)
+            except Exception as e:
+                st.error(":warning: Não foi possível carregar a imagem.")
+                print(e)
+        
+        with col2:
+            show_basic_tool_info(tool.nome, tool.modelo, tool.fabricante, tool.specs)
+    else:
+        with st.container(border=True):
+            show_basic_tool_info(tool.nome, tool.modelo, tool.fabricante, tool.specs)
+            st.caption("Nenhuma imagem encontrada.")
+
+    # Pesquisando nome de quem registrou e mostrando
+    st.write(f"Registrado por: {tool.nome_autor}")
+    st.write(f"Registrado em: {format_time(tool.registeredwhen)}")
+    st.write(f"Modificado em: {format_time(tool.modifiedwhen)}")
+
+# Funções de registros
+def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, int]] | None = None):
+    "Pede as informações e adiciona um registro ao banco. A lista deve conter apenas tuplas, compostas por (arquivo em bytes, diretório)"
+
+    # Adicionando registro
+    try:
+        get_connection().start_transaction()
+        
+        with get_connection().cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO registros (registeredby, idequipamento, data, registro)
+                VALUES (%s, %s, %s, %s)
+                """, (st.session_state.userinfo[0], idequipamento, current_datetime(), registro)
+            )
+
+            # Fazendo uma lista de tuplas com os valores pra colocar na tabela de fotos
+            fotos_add = [(cursor.lastrowid, f"uploads/{i[1]}") for i in fotos]
+            cursor.executemany(
+                """
+                INSERT INTO fotos_registros (idregistro, fotopath)
+                VALUES (%s, %s)
+                """, (fotos_add)
+            )
+        get_connection().commit()
+
+        # Fazendo upload das fotos
+        for i in fotos:
+            upload_file(i[0], f"{i[1]}")
+
+    except Error as e:
+        get_connection().rollback()
+        print(e)
+
+def vizualizar_registro(registro : Registro):
+    "Exibe todas as informações sobre o registro com o ID especificado."
+
+    infocol1, infocol2 = st.columns([4, 6])
+
+    with infocol1:
+        st.subheader("Informações:", divider="gray")
+        st.write(f"Autor: {registro.nome_autor}")
+        st.write(f"Equipamento: {registro.nome_equipamento}")
+        st.write(f"Registrado em: {format_time(registro.data)}")
+
+    with infocol2:
+        st.subheader("Registro:", divider="gray")
+        st.text(registro.registro)
+
+    st.divider()
+
+    # Mostrando imagens
+    if registro.fotos:
+        try:
+            # Aplicando sombrinha em baixo das imagens, e centralizando conteúdo nos containers
+            st.markdown(
+                """
+                <style>
+                [data-testid="stImage"] {
+                    box-shadow: rgb(0 0 0 / 20%) 0px 2px 1px -1px, rgb(0 0 0 / 14%) 0px 1px 1px 0px, rgb(0 0 0 / 12%) 0px 1px 3px 0px;
+                    border-radius: 15px;
+                    padding: 10%;
+                } 
+                </style>
+                """, unsafe_allow_html=True
+            )
+
+            cols = 3
+            imgcols = [i for i in st.columns(cols)]
+            qtd_fotos = len(registro.fotos)
+
+            # Renderizando em colunas diferentes dependendo da quantidade de imagens
+            if qtd_fotos == 1:
+                imgcols[1].image(registro.fotos[0])
+            elif qtd_fotos == 2:
+                imgcols[0].image(registro.fotos[0])
+                imgcols[2].image(registro.fotos[1])
+            else:
+                for i in range(qtd_fotos):
+                    imgcols[i % cols].image(registro.fotos[i])
+
+        except Exception as e:
+            st.error(":warning: Não foi possível carregar a imagem.")
+            print(e)
+    else:
+        st.caption("Este registro não contém fotos.")

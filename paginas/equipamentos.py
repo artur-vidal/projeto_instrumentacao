@@ -1,5 +1,5 @@
 import streamlit as st
-import time
+from functools import partial
 from mysql.connector import Error
 from funcoes import *
 
@@ -13,74 +13,67 @@ sstate = st.session_state
 def editar_equip(equipid : int):
     # Pesquisando
     with get_connection().cursor() as cursor:
-        cursor.execute("SELECT nome, modelo, fabricante, periodo FROM equipamentos WHERE idequipamento = %s", (equipid,))
+        cursor.execute("SELECT nome, modelo, fabricante, periodo, estado, manutencao FROM equipamentos WHERE id = %s", (equipid,))
         search = cursor.fetchone()
 
-    with st.form("edit_equip"):
+    with st.form("edit_equip", enter_to_submit=False):
 
         # Campos para entrada de informação
-        nome_novo = st.text_input("Nome", placeholder=search[0])
-        modelo_novo = st.text_input("Modelo", placeholder=search[1])
-        fabri_novo = st.text_input("Fabricante", placeholder=search[2])
-        estado_novo = st.radio("Estado", ["Operante", "Inoperante"])
-        manutencao_novo = st.radio("Tipo de Manutenção", ["Preventiva", "Corretiva"])
-        periodo_novo = st.number_input("Periodicidade da Manutenção (meses)", min_value=0, value=search[3])
+        nome_novo = st.text_input("Nome", value=search[0])
+        modelo_novo = st.text_input("Modelo", value=search[1])
+        fabri_novo = st.text_input("Fabricante", value=search[2])
+
+        opt_estado = ["Operante", "Operante com defeito", "Inoperante"]
+        estado_novo = st.radio("Estado", opt_estado, index=opt_estado.index(search[4]))
+
+        opt_manutencao = ["Preventiva", "Corretiva"]
+        manutencao_novo = st.radio("Tipo de Manutenção", opt_manutencao, index=opt_manutencao.index(search[5]))
+        periodo_novo = st.number_input("Periodicidade da Manutenção (meses)", min_value=1, value=search[3])
 
         imagem_e = st.file_uploader("Foto do equipamento", type=["png", "jpg", "jpeg", "webp", "bmp", "psd", "tiff", "avif"])
 
         if st.form_submit_button("Aplicar mudanças"):
 
-            # Adiciono os valores novos só se eles forem de fato algo
-            nome_add = nome_novo if nome_novo else search[0]
-            modelo_add = modelo_novo if modelo_novo else search[1]
-            fabri_add = fabri_novo if fabri_novo else search[2]
-            periodo_add = periodo_novo if periodo_novo else search[3]
-
             # Rodando a query para editar
-            with get_connection().cursor() as cursor:
-                if imagem_e:
+            if not all([nome_novo == search[0], modelo_novo == search[1], fabri_novo == search[2], periodo_novo == search[3], estado_novo == search[4], manutencao_novo == search[5], imagem_e == None]):
+                with get_connection().cursor() as cursor:
+                    if imagem_e:
 
-                    # Apagando a imagem anterior
-                    cursor.execute("SELECT fotopath FROM equipamentos WHERE idequipamento = %s", (equipid,))
-                    search = cursor.fetchone()
-                    
-                    with st.spinner(""):
-                        st.write(search)
-                        time.sleep(3)
-                    
-                    os.remove(search[0])
+                        # Apagando a imagem anterior
+                        cursor.execute("SELECT fotopath FROM equipamentos WHERE id = %s", (equipid,))
+                        search = cursor.fetchone()
 
-                    # Guardando no banco de dados
-                    extensao = pathlib.Path(imagem_e.name).suffix
-                    nome_arquivo = generate_filename(extensao)
-                    
-                    get_connection().start_transaction()
-                    try:
-                        cursor.execute(
-                            """
-                            UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, periodo = %s, modifiedwhen = %s, fotopath = %s WHERE idequipamento = %s;
-                            """, (nome_add, modelo_add, fabri_add, estado_novo, manutencao_novo, periodo_add, current_datetime(), f"uploads/images/{nome_arquivo}", equipid)
-                        )
-                        get_connection().commit()
+                        # Guardando no banco de dados
+                        extensao = pathlib.Path(imagem_e.name).suffix
+                        nome_arquivo = generate_filename(extensao)
+                        
+                        get_connection().start_transaction()
+                        try:
+                            cursor.execute(
+                                """
+                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, periodo = %s, modifiedwhen = %s, fotopath = %s WHERE id = %s;
+                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, periodo_novo, current_datetime(), f"uploads/images/{nome_arquivo}", equipid)
+                            )
+                            get_connection().commit()
 
-                        # Fazendo o upload
-                        upload_file(imagem_e.read(), f"images/{nome_arquivo}")
-                    except:
-                        get_connection().rollback()
+                            # Fazendo o upload
+                            upload_file(imagem_e.read(), f"images/{nome_arquivo}")
+                        except:
+                            get_connection().rollback()
 
-                else:
+                    else:
 
-                    # Se não houver imagem, eu só mudo todo o resto
-                    get_connection().start_transaction()
-                    try:
-                        cursor.execute(
-                            """
-                            UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, modifiedwhen = %s, periodo = %s WHERE idequipamento = %s;
-                            """, (nome_add, modelo_add, fabri_add, estado_novo, manutencao_novo, current_datetime(), periodo_add, equipid)
-                        )
-                        get_connection().commit()
-                    except Error:
-                        get_connection().rollback
+                        # Se não houver imagem, eu só mudo todo o resto
+                        get_connection().start_transaction()
+                        try:
+                            cursor.execute(
+                                """
+                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, modifiedwhen = %s, periodo = %s WHERE id = %s;
+                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, current_datetime(), periodo_novo, equipid)
+                            )
+                            get_connection().commit()
+                        except Error:
+                            get_connection().rollback()
 
 
             st.rerun()
@@ -90,7 +83,7 @@ def editar_equip(equipid : int):
 def remover_equip(equipid : int):
 
     # Confirmação
-    st.write(f"Tem certeza de que quer apagar o equipamento ***{get_name_from_equip_id(equipid,)}***?")
+    st.write(f"Tem certeza de que quer apagar o equipamento ***{get_single_info_by_id(equipid, "equipamentos", "nome")}***?")
 
     # Botões
     btn1, btn2 = st.columns(2)
@@ -98,7 +91,7 @@ def remover_equip(equipid : int):
     # Removendo equipamento
     if btn1.button("Sim", use_container_width=True):
         with get_connection().cursor() as cursor:
-            cursor.execute("DELETE FROM equipamentos WHERE idequipamento = %s", (equipid,))
+            cursor.execute("DELETE FROM equipamentos WHERE id = %s", (equipid,))
             get_connection().commit()
         
         st.rerun()
@@ -116,7 +109,7 @@ with tab1:
         with get_connection().cursor() as cursor:
             cursor.execute(
                 """
-                SELECT idequipamento FROM equipamentos
+                SELECT id FROM equipamentos WHERE registeredby IN (SELECT id FROM usuarios WHERE enabled = TRUE) ORDER BY nome ASC
                 """
             )
             search = cursor.fetchall()
@@ -124,44 +117,41 @@ with tab1:
         if search:
             # Faço uma lista composta pelos IDs dos equipamentos e coloco na selectbox
             equips = [i[0] for i in search]
-            selected = st.selectbox("Lista de equipamentos", equips, key="equiplist1", format_func=get_name_from_equip_id)
+            func = partial(get_single_info_by_id, table="equipamentos", column="nome")
+            selected = st.selectbox("Lista de equipamentos", equips, key="equiplist1", format_func=func)
         else:
             selected = st.selectbox("Lista de equipamentos", None, placeholder="Nenhum equipamento.", key="equiplist1")
 
         st.divider()
 
-        # Exibindo tudo sobre o equipamento selecionado
-        cursor = get_connection().cursor()
-        cursor.execute("SELECT * FROM equipamentos WHERE idequipamento = %s", (selected,))
-        search = cursor.fetchone()
+        # Criando a classe do equipamento
+        equip = Equipamento(selected)
+        equip.load_info()
 
         # Mostrando o equipamento encontrado
-        if search:
-            vizualizar_equipamento(search)
+        if selected:
+            vizualizar_equipamento(equip)
         else:
             st.caption("Nenhum equipamento selecionado.")
-        
-        # Fechando cursor
-        cursor.close()
 
 # Adicionar equipamentos
 with tab2:
     
-    with st.form("equip"):
+    with st.form("equip", clear_on_submit=True, enter_to_submit=False):
         # Campos para entrada de informação
         nome_e = st.text_input("Nome")
         modelo_e = st.text_input("Modelo")
         fabri_e = st.text_input("Fabricante")
-        estado_e = st.radio("Estado", ["Operante", "Inoperante"])
+        estado_e = st.radio("Estado", ["Operante", "Operante com defeito", "Inoperante"])
         manutencao_e = st.radio("Tipo de Manutenção", ["Preventiva", "Corretiva"])
-        periodo_e = st.number_input("Periodicidade da Manutenção (meses)", min_value=0, value=0)
+        periodo_e = st.number_input("Periodicidade da Manutenção (meses)", min_value=1)
 
         imagem_e = st.file_uploader("Foto do equipamento (opcional)", type=["png", "jpg", "jpeg", "webp", "bmp", "psd", "tiff", "avif"])
 
         if(st.form_submit_button("Registrar")):
             
             # Checando todos os valores
-            if(all([nome_e, modelo_e, fabri_e, estado_e, manutencao_e, periodo_e])):
+            if(all([nome_e, modelo_e, fabri_e])):
                 # Registrando a imagem
                 if(imagem_e):
                     extensao = pathlib.Path(imagem_e.name).suffix
@@ -180,11 +170,11 @@ with tab2:
 with tab3:
     with get_connection().cursor() as cursor:
         if(sstate.userinfo[1]):
-            cursor.execute("SELECT idequipamento FROM equipamentos ORDER BY modifiedwhen ASC")
+            cursor.execute("SELECT id FROM equipamentos WHERE registeredby IN (SELECT id FROM usuarios WHERE enabled = TRUE) ORDER BY modifiedwhen ASC")
         else:
             cursor.execute(
                 """
-                SELECT idequipamento FROM equipamentos WHERE registeredby = %s ORDER BY modifiedwhen ASC
+                SELECT id FROM equipamentos WHERE registeredby = %s AND registeredby IN (SELECT id FROM usuarios WHERE enabled = TRUE) ORDER BY modifiedwhen ASC
                 """, (sstate.userinfo[0],)
             )
         search = cursor.fetchall()
@@ -192,7 +182,8 @@ with tab3:
     if search:
         # Faço uma lista composta pelos IDs dos equipamentos e coloco na selectbox
         myequips = [i[0] for i in search]
-        myselected = st.selectbox("Lista de equipamentos", myequips, key="equiplist2", format_func=get_name_from_equip_id)
+        func = partial(get_single_info_by_id, table="equipamentos", column="nome")
+        myselected = st.selectbox("Lista de equipamentos", myequips, key="equiplist2", format_func=func)
     else:
         myselected = st.selectbox("Lista de equipamentos", None, placeholder="Nenhum equipamento.", key="equiplist2")
 

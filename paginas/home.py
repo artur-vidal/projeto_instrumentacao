@@ -10,10 +10,6 @@ st.markdown("<h1 style='display: flex; justify-content: center;'>Página Inicial
 st.divider()
 
 if(sstate.logged):
-    def logout():
-        sstate.userinfo = tuple()
-        sstate.logged = False
-
     st.markdown("<p style='display: flex; justify-content: center; margin: 0; color: gray;'>Logado em:</p>", unsafe_allow_html=True)
     st.markdown(f"<h1 style='display: flex; justify-content: center; margin-bottom: 2rem;'>{sstate.userinfo[2]}</h1>", unsafe_allow_html=True)
     st.button("Sair", use_container_width=True, on_click=logout)
@@ -35,24 +31,22 @@ else:
                     # Tentando fazer login
                     if(login(usuario, senha)):
                         
-                        # Criando cursor
-                        cursor = get_connection().cursor()
-
                         # Buscando os dados desse usuário
-                        cursor.execute("SELECT idusuario, admin, nome FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
-                        search = cursor.fetchone()
-                        cursor.close()
+                        with get_connection().cursor() as cursor:
+                            cursor.execute("SELECT id, admin, nome FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
+                            search = cursor.fetchone()
 
                         # Guardando no session state
                         sstate.userinfo = search
                         sstate.logged = True
 
                         # Mensagem de login
-                        adm_text = "" if not search[1] else " ADMINISTRADOR"
-                        st.success(f"Logado no usuário {search[2]}{adm_text}.")
-                        with st.spinner(""):
-                            time.sleep(3)
-                            st.rerun()
+                        # adm_text = "" if not search[1] else " ADMINISTRADOR"
+                        # st.success(f"Logado no usuário {search[2]}{adm_text}.")
+                        # with st.spinner(""):
+                        #     time.sleep(3)
+                        
+                        st.rerun()
                     
                     else:
                         st.error("Não foi possível fazer login. Verifique todas as informações.")
@@ -73,9 +67,9 @@ def about():
         """
         Nós somos Artur Vidal de Almeida e João Victor Apolinário de Freitas, alunos do curso de Técnico em Desenvolvimento de Sistemas. Juntos, desenvolvemos este projeto com o objetivo de ajudar o curso de Técnico em Instrumentação Industrial. Nosso foco é fazer uma interface fácil de utilizar para registrar todos os seus equipamentos, manutenções e ferramentas, criando soluções que possam facilitar o aprendizado e melhorar a experiência dos alunos e professores.
 
-        Este projeto foi pensado com dedicação, juntamente com os professores Fabiano Luizon Campos e Carlos Assis Silva Aguiar. Esperamos que as ideias que apresentamos aqui possam ser úteis para todos!
+        Este projeto foi pensado com dedicação, juntamente com os professores Fabiano Luizon Campos e Carlos Assis Silva Aguiar, para o professor Everton do curso de Instrumentação. Esperamos que nosso projeto possa ser útil para todos.
 
-        Obrigado por apoiar nosso trabalho!
+        Obrigado por apoiar nosso trabalho! :balloon:
         """
     )
 

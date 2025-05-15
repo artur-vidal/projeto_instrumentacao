@@ -31,15 +31,15 @@ def main():
             # Aqui eu apenas insiro o usuário padrão se ainda não existir um igual, ou seja, com o mesmo e-mail ou CPF (já que são valores únicos). A sintaxe é bem esquisita.
             cursor.execute(
                 """
-                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen)
-                SELECT %s, %s, %s, %s, %s, %s
+                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled)
+                SELECT %s, %s, %s, %s, %s, %s, %s
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM usuarios WHERE email = %s OR cpf = %s
                 )
                 """,
                 ("ADM", bcrypt.hashpw("adminSENAI2025".encode("utf-8"), bcrypt.gensalt()),
-                "admin@admin", "00000000000", True, current_datetime(),
+                "admin@admin", "00000000000", True, current_datetime(), True,
                 "admin@admin", "00000000000")
             )
 
@@ -48,6 +48,8 @@ def main():
             sstate.userinfo = tuple()
         if "logged" not in sstate:
             sstate.logged = False
+        if "verified" not in sstate:
+            sstate.verified = False
         
         # Páginas
         pages = {
@@ -57,6 +59,8 @@ def main():
 
             # Páginas pós-login
             "equipamentos" : st.Page("paginas/equipamentos.py", title="Equipamentos"),
+            "ferramentas" : st.Page("paginas/ferramentas.py", title="Ferramentas"),
+            "registros" : st.Page("paginas/registros.py", title="Registros"),
 
             # Páginas de administrador
             "admin" : st.Page("paginas/admin.py", title="Admin")
@@ -69,7 +73,7 @@ def main():
 
         standard_page_groups = {
             "Inicial" : [pages["inicial"]],
-            "Registros" : [pages["equipamentos"]]
+            "Registros" : [pages["equipamentos"], pages["ferramentas"], pages["registros"]]
         }
 
         admin_page_groups = standard_page_groups.copy() # Crio uma cópia das páginas padrão para adicionar as novas
