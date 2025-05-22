@@ -10,7 +10,7 @@ def main():
     try:
         get_connection()
     except Exception as e:
-        st.write("Não foi possível conectar ao banco em localhost:3306. Verifique se a conexão está aberta, e reinicie a página.")
+        st.write("Não foi possível conectar ao banco. Verifique se o banco está ativo e se o host está correto, e reinicie a página.")
 
         # escrevendo o erro
         st.header("Erro", divider="gray")
@@ -25,7 +25,10 @@ def main():
         # Criando as tabelas
         criar_tabelas()
 
-        # Criando usuário administrador padrão
+        # Criando usuário administrador padrão com os dados do arquivo de configucação
+        with open("config/default_user_config.json", "r") as f:
+            default_user = json.load(f)
+        
         with get_connection().cursor() as cursor:
 
             # Aqui eu apenas insiro o usuário padrão se ainda não existir um igual, ou seja, com o mesmo e-mail ou CPF (já que são valores únicos). A sintaxe é bem esquisita.
@@ -38,9 +41,9 @@ def main():
                     SELECT 1 FROM usuarios WHERE email = %s OR cpf = %s
                 )
                 """,
-                ("ADM", bcrypt.hashpw("adminSENAI2025".encode("utf-8"), bcrypt.gensalt()),
-                "admin@admin", "00000000000", True, current_datetime(), True,
-                "admin@admin", "00000000000")
+                (default_user["name"], bcrypt.hashpw(default_user["password"].encode("utf-8"), bcrypt.gensalt()),
+                default_user["email"], default_user["cpf"], True, current_datetime(), True,
+                default_user["email"], default_user["cpf"])
             )
 
         # Adicionando outras variáveis no session state

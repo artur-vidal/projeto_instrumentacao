@@ -1,13 +1,7 @@
 import mysql.connector as sqlconn
 from mysql.connector import Error
 import streamlit as st
-import os, bcrypt, datetime, uuid, pathlib
-
-dbconfig = {
-    "host" : "localhost",
-    "user" : "root",
-    "password" : "senhabanco"
-}
+import os, bcrypt, datetime, uuid, pathlib, re, json, openpyxl
 
 # Classes
 class Usuario():
@@ -23,6 +17,7 @@ class Usuario():
 
         self.loaded : bool = False
 
+    # Representação em string
     def __str__(self):
         if self.loaded:
             return f"""
@@ -72,6 +67,7 @@ class Equipamento():
         # Guardando uma variável com o nome do autor do equipamento
         self.nome_autor : str = None
 
+        # Variável que representa o estado de carregamento da classe (carregado/não carregado)
         self.loaded : bool = False
 
     def __str__(self):
@@ -134,6 +130,7 @@ class Ferramenta():
         # Guardando uma variável com o nome do autor do equipamento
         self.nome_autor : str = None
 
+        # Variável que representa o estado de carregamento da classe (carregado/não carregado)
         self.loaded : bool = False
 
     def __str__(self):
@@ -190,6 +187,7 @@ class Registro():
         self.nome_autor : str = None
         self.nome_equipamento : str = None
 
+        # Variável que representa o estado de carregamento da classe (carregado/não carregado)
         self.loaded : bool = False
 
     def __str__(self):
@@ -243,12 +241,8 @@ def current_datetime() -> datetime.datetime:
     "Retorna a data e hora de agora, sem os microssegundos."
     return datetime.datetime.now().replace(microsecond=0)
 
-def get_folder_name(path : str) -> str:
-    "Retorna o nome da pasta em que o arquivo está."
-    return os.path.basename(os.path.dirname(path))
-
 def generate_filename(extension) -> str:
-    "Gera um nome de arquivo a partir de um UUID v4"
+    "Gera um nome de arquivo a partir de um UUID v4."
     return f"{uuid.uuid4()}{extension}"
 
 def upload_file(file_content : bytes, file_path : str) -> None:
@@ -295,10 +289,14 @@ def limpar_imagens_inuteis() -> None:
 def get_single_info_by_id(id : int, table : str, column : str):
     "Retorna um dado baseado no id especificado."
 
-    with get_connection().cursor() as cursor:
-        cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", (id,))
-        search = cursor.fetchone()
-        return search[0] if search else None
+    try:
+        with get_connection().cursor() as cursor:
+            cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", (id,))
+            search = cursor.fetchone()
+            return search[0] if search else None
+    except Error as e:
+        print(e)
+        return None
 
 # Manipular banco
 def get_connection() -> sqlconn.MySQLConnection:
@@ -309,7 +307,11 @@ def get_connection() -> sqlconn.MySQLConnection:
     # Caso a variável ainda não esteja no session state, ou a conexão não estiver sendo feita, o código tenta uma conexão com o banco.
     if "conn" not in sstate or not sstate["conn"].is_connected():
 
-        # Conectando
+        # Lendo o arquivo de configuração e guardando na variável
+        with open("config/config_banco.json") as config:
+            dbconfig = json.load(config)
+        
+        # Conectando com as informações da variável descompactada
         conn = sqlconn.connect(**dbconfig)
         sstate["conn"] = conn
 
@@ -334,30 +336,6 @@ def close_connection() -> None:
 def criar_tabelas() -> None:
     """Cria as tabelas de equipamentos, ferramentas e usuários, caso não existam. Passa por cada uma individualmente.
 
-    Equipamentos 
-        - ID (INT not null primary key auto_increment)
-        - Nome (VARCHAR(255) not null)
-        - Modelo (VARCHAR(255) not null)
-        - Fabricante (VARCHAR(255) not null)
-        - Estado (VARCHAR(255) not null)
-        - Tipo de Manutenção (VARCHAR(255) not null)
-        - Periodicidade (INT not null)
-        - Registrado por (INT not null)
-        - Registrado em (DATETIME not null)
-        - Modificado em (DATETIME not null)
-        - Caminho da Foto (VARCHAR(40))
-    
-    Ferramentas 
-        - ID (INT not null primary key auto_increment)
-        - Nome (VARCHAR(255) not null)
-        - Modelo (VARCHAR(255) not null)
-        - Fabricante (VARCHAR(255) not null)
-        - Specs (VARCHAR(255) not null)
-        - Registrado por (INT not null)
-        - Registrado em (DATETIME not null)
-        - Modificado em (DATETIME not null) 
-        - Caminho da Foto (VARCHAR(40))
-
     Usuários 
         - ID (INT not null primary key auto_increment)
         - Nome (VARCHAR(255) not null)
@@ -366,13 +344,42 @@ def criar_tabelas() -> None:
         - CPF (VARCHAR(11) not null unique)
         - Administrator (BOOL not null)
         - Criado em (DATETIME not null)
+        - Ativo (BOOL not null)
+
+    Equipamentos 
+        - ID (INT not null primary key auto_increment)
+        - Nome (VARCHAR(255) not null)
+        - Modelo (VARCHAR(255) not null)
+        - Fabricante (VARCHAR(255) not null)
+        - Estado (VARCHAR(255) not null)
+        - Tipo de Manutenção (VARCHAR(255) not null)
+        - Periodicidade (INT not null)
+        - Registrado por (INT FK usuarios(id) not null)
+        - Registrado em (DATETIME not null)
+        - Modificado em (DATETIME not null)
+        - Caminho da Foto (VARCHAR(100))
+    
+    Ferramentas 
+        - ID (INT not null primary key auto_increment)
+        - Nome (VARCHAR(255) not null)
+        - Modelo (VARCHAR(255) not null)
+        - Fabricante (VARCHAR(255) not null)
+        - Specs (VARCHAR(255) not null)
+        - Registrado por (INT FK usuarios(id) not null)
+        - Registrado em (DATETIME not null)
+        - Modificado em (DATETIME not null) 
+        - Caminho da Foto (VARCHAR(100))
 
     Registros
         - ID (INT not unll primary key auto_increment)
-        - IDusuario (INT FK (idusuario))
-        - IDequipamento (INT FK (idequipamento))
+        - Autor (INT FK usuarios(id))
+        - IDequipamento (INT FK equipamentos(id))
         - Data (DATETIME not null)
-        - Registro (VARCHAR(10000) not null)
+        - Registro (VARCHAR(2000) not null)
+    
+    Fotos dos Registros
+        - IDregistro (INT FK registros(id) not null)
+        - Caminho (VARCHAR(100) not null)
     """
 
     # Criando o cursor
@@ -463,8 +470,7 @@ def criar_tabelas() -> None:
 
 # Funções pra usuário
 def check_cpf(cpf : int) -> int | None:
-    """Pega um CPF via input() e o retorna um dict com o valor numérico e o valor formatado (123.456.789-09).
-    Se for inválido, retorna None"""
+    "Pega um CPF via input() e o retorna se for válido. Caso contrário, retorna None"
 
     cpf_str = str(cpf)
 
@@ -505,22 +511,15 @@ def check_cpf(cpf : int) -> int | None:
             return None
         
 def check_email(email : str) -> str | None:
-    "Pega um email e o retorna após validação. Retorna None se for inválido. exemplo@dominio"
+    "Pega um email e o retorna após validação. Retorna None se for inválido. exemplo@dominio.com"
 
-    while True:
-        # Verificando se tem um arroba só no email. Caso contrário, tem algo errado.
-        if(email.count("@") == 1):
-            
-            # Verificando se existe local e domínio (antes/depois do @)
-            atpos = email.find("@")
+    # Usando regex para validar o email
 
-            # Checando se a parte pós-arroba existe ou não começa com espaço ou ponto
-            if(email[atpos+1:] == "" or email[atpos+1] in [" ", "."] or email[-1] in [" ", "."]):
-                return None
-            else:
-                return email
-        else:
-            return None
+    # Primeiro pedaço - pode conter letras minúsculas, maiúsculas, dígitos, ponto, underline e hífen
+    # Segundo pedaço (pós @) - pode conter letras minúsculas, maiúsculas, dígitos, ponto, underline e hífen
+    # Terceiro pedaço (depois do último ponto) - pode conter apenas letras minúsculas ou maiúsculas
+    valido = re.search(r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,}$", email)
+    return bool(valido)
 
 def format_cpf(cpf : int | str):
     "Formata um CPF com os traços e hífens."
@@ -580,6 +579,7 @@ def login(usuario : str | int, password : str | bytes) -> bool:
 def logout() -> None:
     "Sai do usuário atual."
 
+    # Limpando sessão
     st.session_state.userinfo = tuple()
     st.session_state.logged = False
 
@@ -599,7 +599,9 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
                 """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
         get_connection().commit()
-        if(foto): upload_file(foto[0], foto[1])
+
+        # Se tem alguma foto, eu faço upload dela.
+        if(foto): upload_file(foto[0], foto[1]) 
     except Error as e:
         get_connection().rollback()
         print(e)
@@ -607,7 +609,6 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
 def show_basic_equip_info(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : str) -> None:
     "Exibe as informações básicas do equipamento."
     
-    # Aplicando sombrinha em baixo das colunas
     col1, col2, col3 = st.columns(3, border=True)
     
     col1.write(f"Nome: {nome}")
@@ -617,12 +618,13 @@ def show_basic_equip_info(nome : str, modelo : str, fabricante : str, estado : s
     col2.write(f"Estado: {estado}")
 
     col3.write(f"Manutenção: {manutencao}")
-    if periodo > 1: col3.write(f"Periodicidade: {periodo} em {periodo} {"mês" if periodo == 1 else "meses"}")
-    else: col3.write("Periodicidade: Todo mês")
+    if periodo > 1: col3.write(f"Periodicidade: {periodo} em {periodo} meses") # Se o período for maior que 1, exibo no formato X em X meses.
+    else: col3.write("Periodicidade: Todo mês") # Se for 1, escrevo "Todo mês"
 
 def vizualizar_equipamento(equip : Equipamento):
     "Função que mostra as informações do equipamento especificado com a busca."
 
+    # Exibindo foto se ela existir
     if equip.fotopath: 
         # Usando colunas para centralizar a imagem
         try:
@@ -633,6 +635,8 @@ def vizualizar_equipamento(equip : Equipamento):
             print(e)
     
     show_basic_equip_info(equip.nome, equip.modelo, equip.fabricante, equip.estado, equip.manucentao, equip.periodo)
+
+    # Se não, eu mostro que não tem nenhuma.
     if not equip.fotopath: 
         st.caption("Nenhuma imagem encontrada.")
         st.divider()
@@ -658,6 +662,8 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, fot
                 """, (nome, modelo, fabricante, specs, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
         get_connection().commit()
+
+        # Se tem uma foto, eu faço upload dela.
         if(foto): upload_file(foto[0], foto[1])
     except Error as e:
         get_connection().rollback()
@@ -675,6 +681,7 @@ def show_basic_tool_info(nome : str, modelo : str, fabricante : str, specs : str
 def vizualizar_ferramenta(tool : Ferramenta):
     "Função que mostra as informações da ferramenta especificado com a busca."
 
+    # Exibindo com layout de foto se houver uma
     if(tool.fotopath):
         col1, col2 = st.columns(2, border=True, vertical_alignment="center")
 
@@ -688,6 +695,7 @@ def vizualizar_ferramenta(tool : Ferramenta):
         
         with col2:
             show_basic_tool_info(tool.nome, tool.modelo, tool.fabricante, tool.specs)
+    # Se não houver foto, exibindo layout padrão
     else:
         with st.container(border=True):
             show_basic_tool_info(tool.nome, tool.modelo, tool.fabricante, tool.specs)
@@ -714,19 +722,22 @@ def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, i
                 """, (st.session_state.userinfo[0], idequipamento, current_datetime(), registro)
             )
 
-            # Fazendo uma lista de tuplas com os valores pra colocar na tabela de fotos
-            fotos_add = [(cursor.lastrowid, f"uploads/{i[1]}") for i in fotos]
-            cursor.executemany(
-                """
-                INSERT INTO fotos_registros (idregistro, fotopath)
-                VALUES (%s, %s)
-                """, (fotos_add)
-            )
+            if fotos:
+                # Fazendo uma lista de tuplas com os valores necessários pra colocar na tabela de fotos
+                fotos_add = [(cursor.lastrowid, f"uploads/{i[1]}") for i in fotos]
+                cursor.executemany(
+                    """
+                    INSERT INTO fotos_registros (idregistro, fotopath)
+                    VALUES (%s, %s)
+                    """, (fotos_add)
+                )
+
         get_connection().commit()
 
         # Fazendo upload das fotos
-        for i in fotos:
-            upload_file(i[0], f"{i[1]}")
+        if fotos:
+            for i in fotos:
+                upload_file(i[0], f"{i[1]}")
 
     except Error as e:
         get_connection().rollback()
@@ -735,6 +746,7 @@ def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, i
 def vizualizar_registro(registro : Registro):
     "Exibe todas as informações sobre o registro com o ID especificado."
 
+    # Layout das informações
     infocol1, infocol2 = st.columns([4, 6])
 
     with infocol1:
@@ -784,3 +796,81 @@ def vizualizar_registro(registro : Registro):
             print(e)
     else:
         st.caption("Este registro não contém fotos.")
+
+# Funções de importação
+def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
+    "Lê todos os dados de usuários de uma planilha e os adiciona após validação."
+
+    # Carregando a planilha
+    planilha = openpyxl.load_workbook(excel_file_bytes)
+
+    # Guardando a página em uma variável (primeira página)
+    users_sheet = planilha[planilha.sheetnames[0]]
+
+    # Guardando os usuários em uma lista
+    # 0 - Nome, 1 - Email, 2 - CPF, 3 - Senha, 4 - Admin
+    users = []
+    for row in users_sheet.iter_rows(min_row=2, max_row=2+rows):
+        info = [row[i].value for i in range(5)]
+        if all(info[:4]) and info[4] is not None:
+            users.append(info)
+
+    # FAZENDO VERIFICAÇÕES
+    # Validação de Síntaxe e Duplicatas
+    user_amount = len(users)
+    emails, cpfs = set(), set() # O tamanho desses dois sets tem que ser igual à quantidade de usuários
+
+    valid = True # Se torna False no momento em que alguma verificação falha
+    prompt_results = [] # Guarda as mensagens de erro
+
+    # Iterando
+    for i in range(len(users)):
+        emails.add(users[i][1])
+        cpfs.add(users[i][2])
+
+        if not check_email(users[i][1]):
+            valid = False
+            prompt_results.append(f"E-mail inválido na ***linha {i + 2}***.")
+
+        if not check_cpf(users[i][2]):
+            valid = False
+            prompt_results.append(f"CPF inválido na ***linha {i + 2}***.")
+
+    # Verificando tamanho
+    if not len(emails) == user_amount: 
+        valid = False
+        prompt_results.append("Há algum e-mail duplicado na planilha.")
+    if not len(cpfs) == user_amount: 
+        valid = False
+        prompt_results.append("Há algum CPF duplicado na planilha.")
+
+    # Rodando tarefas
+    if valid:
+        
+        # Guardando os dados para a query em uma lista
+        users_add = []
+        for user in users:
+            # Nome, Senha, E-mail, CPF, Admin, Data de criação, Ativado
+            users_add.append([user[0].upper(), bcrypt.hashpw(user[3].encode("utf-8"), bcrypt.gensalt()), user[1], user[2], user[4], current_datetime(), True])
+
+        # Transação
+        with st.spinner("Registrando", show_time=True):
+            try:
+                get_connection().start_transaction()
+
+                with get_connection().cursor() as cursor:
+                    cursor.executemany("INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled) VALUES (%s, %s, %s, %s, %s, %s, %s)", users_add)
+
+                get_connection().commit()
+
+                # Mensagenzinha de sucesso :D
+                st.success("Usuários cadastrados com sucesso!")
+            except Error as e:
+                get_connection().rollback()
+
+                # Notificando erro
+                st.error("Ocorreu um erro durante o cadastro.")
+                print(e)
+    # Printando erros caso algum tenha ocorrido
+    else:
+        for i in prompt_results: st.error(i)

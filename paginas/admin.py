@@ -24,29 +24,29 @@ def cadastrar():
         admin_c = st.checkbox("Administrador?")
 
         if st.form_submit_button("Cadastrar"):
+            # Se tudo estiver preenchido, eu crio o usuário no banco
             if(all([nome_c, email_c, cpf_c, senha_c])):
                 if(check_email(email_c) and check_cpf(cpf_c)):
                     novo_usuario(nome_c, senha_c, cpf_c, email_c, admin_c)
                     st.rerun()
                 else:
+                    # Erro se a validação não der certo
                     st.error("O e-mail ou CPF é inválido. Use valores reais.")
             else:
                 st.warning("Preencha todos os campos.")
 
-# Cadastro
-st.button("Cadastrar novo usuário", on_click=cadastrar)
-st.caption("Abre um pop-up para cadastrar um novo usuário.")
+# Importar usuários
+@st.dialog("Importação")
+def importar():
+    arquivo = st.file_uploader("Selecione sua planilha", type="xlsx")
+    st.caption("Caso altere a planilha, é necessário carregar o arquivo novamente.")
+    qtd = st.slider("Deseja registrar quantos usuários?", 10, 50, step=5)
 
-# Paro de renderizar a partir daqui se o usuário for o admin
-if sstate.userinfo[0] == 1: st.stop()
-
-# Limpar imagens inutilizadas
-st.button("Limpar imagens inutilizadas", on_click=limpar_imagens_inuteis)
-st.caption("Apaga as imagens salvas que não estão sendo usadas em lugar algum.")
-
-st.divider()
-
-# Arquivar usuário
+    if arquivo:
+        if st.button("Importar"):
+            import_users(arquivo, qtd)
+    
+# Função para arquivar usuário
 @st.dialog("Arquivar Usuário")
 def arquivar():
     st.caption("Selecione o usuário para arquivar")
@@ -78,10 +78,7 @@ def arquivar():
             print(e)
             st.error("Ocorreu um erro ao arquivar o usuário. Cheque o console para verificar.")
 
-st.button("Arquivar usuário", on_click=arquivar)
-st.caption("Selecione um usuário para arquivar. Isso vai essencialmente desabilitá-lo, mas pode ser desarquivado a qualquer momento.")
-
-# Desarquivar usuário
+# Função para desarquivar usuário
 @st.dialog("Desarquivar Usuário")
 def desarquivar():
     if sstate.verified:
@@ -130,5 +127,34 @@ def desarquivar():
                 else:
                     st.error("Senha incorreta. Verifique se inseriu a senha correta.")
 
+# Cadastro
+st.button("Cadastrar novo usuário", on_click=cadastrar)
+st.caption("Abre um pop-up para cadastrar um novo usuário.")
+
+import_col1, import_col2 = st.columns([1, 2])
+import_col1.button("Importar planilha de usuários", on_click=importar)
+
+with open("assets/sheet_model.xlsx", "rb") as f:
+    import_col2.download_button("Baixar modelo", data=f, file_name="Planilha de Usuários - Modelo.xlsx", type="primary")
+    
+st.caption("Selecione uma planilha em excel para importar os usuários dentro dela. Ela deve seguir o modelo padronizado disponível a seguir.")
+st.caption("O modelo pode ser encontrado em assets/sheet_model.xlsx caso precise modificá-lo, mas note que uma mudança no **layout** pode gerar erros, então é aconselhada apenas a mudança de cores ou fontes.")
+
+# Paro de renderizar a partir daqui se o usuário for o admin
+if sstate.userinfo[0] == 1: st.stop()
+
+st.divider()
+
+# Limpar imagens inutilizadas
+st.button("Limpar imagens inutilizadas", on_click=limpar_imagens_inuteis)
+st.caption("Apaga as imagens salvas em 'uploads/images/' que não estão sendo usadas em lugar algum.")
+
+st.divider()
+
+# Arquivar usuário
+st.button("Arquivar usuário", on_click=arquivar)
+st.caption("Selecione um usuário para arquivar. Isso vai essencialmente desabilitá-lo, mas pode ser desarquivado a qualquer momento.")
+
+# Desarquivar usuário
 st.button("Desarquivar usuário", on_click=desarquivar)
 st.caption("Selecione um usuário para desarquivar. Isso vai reabilitá-lo, fazendo com que seus registros apareçam novamente.")
