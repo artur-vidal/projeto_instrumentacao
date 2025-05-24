@@ -1,5 +1,5 @@
 import streamlit as st
-from funcoes import *
+from back_functions import *
 from functools import partial
 
 st.title("Registros")
@@ -68,7 +68,7 @@ with tab2:
                 if fotos_r:
                     fotos_add = []
                     for i in fotos_r:
-                        extensao = pathlib.Path(i.name).suffix
+                        extensao = Path(i.name).suffix
                         nome_arquivo = generate_filename(extensao)
                         fotos_add.append((i.read(), f"images/{nome_arquivo}"))
                     

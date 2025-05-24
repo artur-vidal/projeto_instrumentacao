@@ -1,7 +1,7 @@
 import streamlit as st
 from functools import partial
 from mysql.connector import Error
-from funcoes import *
+from back_functions import *
 
 st.title("Equipamentos")
 
@@ -44,7 +44,7 @@ def editar_equip(equipid : int):
                         search = cursor.fetchone()
 
                         # Guardando no banco de dados
-                        extensao = pathlib.Path(imagem_e.name).suffix
+                        extensao = Path(imagem_e.name).suffix
                         nome_arquivo = generate_filename(extensao)
                         
                         get_connection().start_transaction()
@@ -58,6 +58,10 @@ def editar_equip(equipid : int):
 
                             # Fazendo o upload
                             upload_file(imagem_e.read(), f"images/{nome_arquivo}")
+
+                            # Registrando
+                            register_log(f"{sstate.userinfo[2]} editou o EQUIPAMENTO {search[0]}")
+
                         except:
                             get_connection().rollback()
 
@@ -72,6 +76,10 @@ def editar_equip(equipid : int):
                                 """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, current_datetime(), periodo_novo, equipid)
                             )
                             get_connection().commit()
+
+                            # Registrando
+                            register_log(f"{sstate.userinfo[2]} editou o EQUIPAMENTO {search[0]}")
+
                         except Error:
                             get_connection().rollback()
 
@@ -90,9 +98,22 @@ def remover_equip(equipid : int):
 
     # Removendo equipamento
     if btn1.button("Sim", use_container_width=True):
-        with get_connection().cursor() as cursor:
-            cursor.execute("DELETE FROM equipamentos WHERE id = %s", (equipid,))
+        
+        nome_equip = get_single_info_by_id(equipid, "equipamentos", "nome")
+
+        try:
+            get_connection().start_transaction()
+            with get_connection().cursor() as cursor:
+                cursor.execute("DELETE FROM equipamentos WHERE id = %s", (equipid,))
             get_connection().commit()
+
+            # Registrando
+            register_log(f"{sstate.userinfo[2]} removeu o EQUIPAMENTO {nome_equip}")
+
+            st.rerun()
+        except Error as e:
+            get_connection().rollback()
+            print(e)
         
         st.rerun()
 
@@ -154,7 +175,7 @@ with tab2:
             if(all([nome_e, modelo_e, fabri_e])):
                 # Registrando a imagem
                 if(imagem_e):
-                    extensao = pathlib.Path(imagem_e.name).suffix
+                    extensao = Path(imagem_e.name).suffix
                     nome_arquivo = generate_filename(extensao)
 
                     # Registrando o resto

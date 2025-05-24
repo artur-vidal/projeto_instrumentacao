@@ -1,6 +1,6 @@
 import streamlit as st
 from functools import partial
-from funcoes import *
+from back_functions import *
 
 st.title("Ferramentas")
 
@@ -38,7 +38,7 @@ def editar_ferramenta(ferrid : int):
                         search = cursor.fetchone()               
 
                         # Guardando no banco de dados
-                        extensao = pathlib.Path(imagem_f.name).suffix
+                        extensao = Path(imagem_f.name).suffix
                         nome_arquivo = generate_filename(extensao)
                         
                         get_connection().start_transaction()
@@ -52,6 +52,10 @@ def editar_ferramenta(ferrid : int):
 
                             # Fazendo o upload
                             upload_file(imagem_f.read(), f"images/{nome_arquivo}")
+
+                            # Registrando
+                            register_log(f"{sstate.userinfo[2]} editou a FERRAMENTA {search[0]}")
+
                         except Exception as e:
                             get_connection().rollback()
                             print(e)
@@ -67,6 +71,10 @@ def editar_ferramenta(ferrid : int):
                                 """, (nome_novo, modelo_novo, fabri_novo, specs_novo, current_datetime(), ferrid)
                             )
                             get_connection().commit()
+
+                            # Registrando
+                            register_log(f"{sstate.userinfo[2]} editou a FERRAMENTA {search[0]}")
+
                         except Exception as e:
                             get_connection().rollback()
                             print(e)
@@ -84,10 +92,15 @@ def remover_ferramenta(ferrid : int):
     btn1, btn2 = st.columns(2)
 
     # Removendo ferramenta
+    nome_tool = get_single_info_by_id(ferrid, "ferramentas", "nome")
     if btn1.button("Sim", use_container_width=True):
+
         with get_connection().cursor() as cursor:
             cursor.execute("DELETE FROM ferramentas WHERE id = %s", (ferrid,))
-            get_connection().commit()
+        get_connection().commit()
+
+        # Registrando
+        register_log(f"{sstate.userinfo[2]} removeu a FERRAMENTA {nome_tool}")
         
         st.rerun()
 
@@ -147,7 +160,7 @@ with tab2:
             if(all([nome_f, modelo_f, fabri_f, specs_f])):
                 # Registrando a imagem
                 if(imagem_e):
-                    extensao = pathlib.Path(imagem_e.name).suffix
+                    extensao = Path(imagem_e.name).suffix
                     nome_arquivo = generate_filename(extensao)
 
                     # Registrando o resto

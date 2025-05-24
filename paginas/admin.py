@@ -2,7 +2,7 @@ import streamlit as st
 import bcrypt, time
 from mysql.connector import Error
 from functools import partial
-from funcoes import *
+from back_functions import *
 
 st.title("Painel do Administrador")
 
@@ -20,14 +20,13 @@ def cadastrar():
         nome_c = st.text_input("Nome do usuário")
         email_c = st.text_input("E-mail")
         cpf_c = st.text_input("CPF", max_chars=11)
-        senha_c = st.text_input("Senha", type="password")
         admin_c = st.checkbox("Administrador?")
 
         if st.form_submit_button("Cadastrar"):
             # Se tudo estiver preenchido, eu crio o usuário no banco
-            if(all([nome_c, email_c, cpf_c, senha_c])):
+            if(all([nome_c, email_c, cpf_c])):
                 if(check_email(email_c) and check_cpf(cpf_c)):
-                    novo_usuario(nome_c, senha_c, cpf_c, email_c, admin_c)
+                    novo_usuario(nome_c, cpf_c, email_c, admin_c)
                     st.rerun()
                 else:
                     # Erro se a validação não der certo
@@ -53,7 +52,7 @@ def arquivar():
 
     # Buscando usuários e excluindo o administrador
     with get_connection().cursor() as cursor:
-        cursor.execute("SELECT id FROM usuarios WHERE enabled = TRUE AND cpf != 00000000000")
+        cursor.execute("SELECT id FROM usuarios WHERE enabled = TRUE AND (id != 1 AND id != %s)", (sstate.userinfo[0],))
         usuarios = [i[0] for i in cursor.fetchall()]
 
     # Fazendo a lista
@@ -127,6 +126,66 @@ def desarquivar():
                 else:
                     st.error("Senha incorreta. Verifique se inseriu a senha correta.")
 
+# Função para redefinir senha de usuário
+@st.dialog("Removendo Senha")
+def remover_senha():
+    user = st.text_input("Insira o e-mail ou CPF do usuário:")
+
+    remover = st.button("Remover senha", type="primary", use_container_width=True)
+
+    if remover:
+        # Rodando query para ver se o usuário existe
+        with get_connection().cursor() as cursor:
+            cursor.execute("SELECT id FROM usuarios WHERE email = %s or cpf = %s", (user, user))
+            idusuario = cursor.fetchone()
+        
+        # Se existe, eu rodo a tarefa
+        if idusuario:
+
+            if idusuario[0] != 1 and idusuario[0] != sstate.userinfo[0]:
+
+                # Rodando query para tirar a senha
+                try:
+                    get_connection().start_transaction()
+                    with get_connection().cursor() as cursor:
+                        cursor.execute("UPDATE usuarios SET senha = NULL WHERE id = %s", (idusuario[0],))
+
+                    get_connection().commit()
+
+                    st.rerun()
+                except Error as e:
+                    get_connection().rollback()
+                    print(e)
+
+            elif idusuario[0] == 1:
+                st.warning(":warning: Não remova a senha do usuário padrão. Edite o arquivo de configuração ao invés disso.")
+
+            elif idusuario[0] == sstate.userinfo[0]:
+                st.warning(":warning: Não é possível remover a senha do usuário atual. Faça isso via outro usuário.")
+
+        else:
+            st.error("Este usuário não existe.")
+
+# Mostrar registro de auditoria
+@st.dialog("Registro de Auditoria", width="large")
+def registro_auditoria():
+
+    if os.path.exists("logs"):
+        arquivos = os.listdir("logs")
+        registros = []
+        for i in sorted(arquivos, key=lambda x: datetime.datetime.strptime(x.split("_")[0], "%d%m%Y")):
+            with open(os.path.join(LOG_DIR, i), "r") as f:
+                registros.append(f.read())
+        
+        format_register = lambda x: x[1:11]
+        lista_registros = st.selectbox("Selecione um dia", options=registros, format_func=format_register)
+        st.code(lista_registros)
+
+        # Botão de exportar
+        st.download_button("Baixar esse registro", data=lista_registros, file_name=f"{format_register(lista_registros)}_log.log", icon=":material/download:")
+    else:
+        st.write("Não há nenhum registro.")
+
 # Cadastro
 st.button("Cadastrar novo usuário", on_click=cadastrar)
 st.caption("Abre um pop-up para cadastrar um novo usuário.")
@@ -135,15 +194,19 @@ import_col1, import_col2 = st.columns([1, 2])
 import_col1.button("Importar planilha de usuários", on_click=importar)
 
 with open("assets/sheet_model.xlsx", "rb") as f:
-    import_col2.download_button("Baixar modelo", data=f, file_name="Planilha de Usuários - Modelo.xlsx", type="primary")
+    import_col2.download_button("Baixar modelo", data=f, file_name="Planilha de Usuários - Modelo.xlsx", type="primary", icon=":material/download:")
     
 st.caption("Selecione uma planilha em excel para importar os usuários dentro dela. Ela deve seguir o modelo padronizado disponível a seguir.")
 st.caption("O modelo pode ser encontrado em assets/sheet_model.xlsx caso precise modificá-lo, mas note que uma mudança no **layout** pode gerar erros, então é aconselhada apenas a mudança de cores ou fontes.")
+
+
 
 # Paro de renderizar a partir daqui se o usuário for o admin
 if sstate.userinfo[0] == 1: st.stop()
 
 st.divider()
+
+
 
 # Limpar imagens inutilizadas
 st.button("Limpar imagens inutilizadas", on_click=limpar_imagens_inuteis)
@@ -158,3 +221,13 @@ st.caption("Selecione um usuário para arquivar. Isso vai essencialmente desabil
 # Desarquivar usuário
 st.button("Desarquivar usuário", on_click=desarquivar)
 st.caption("Selecione um usuário para desarquivar. Isso vai reabilitá-lo, fazendo com que seus registros apareçam novamente.")
+
+# Remover senha de usuário
+st.button("Remover senha de usuário", on_click=remover_senha)
+st.caption("Use esta opção caso um usuário esqueça a própria senha. Isso vai remover a senha dele, e o sistema vai pedir novamente para o usuário criar sua senha.")
+
+st.divider()
+
+# Mostrar logs
+st.button("Registro de auditoria", on_click=registro_auditoria)
+st.caption("Um registro contendo tudo o que é feito no aplicativo.")

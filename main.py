@@ -1,4 +1,4 @@
-from funcoes import *
+from back_functions import *
 import streamlit as st
 import atexit, bcrypt
 
@@ -26,25 +26,39 @@ def main():
         criar_tabelas()
 
         # Criando usuário administrador padrão com os dados do arquivo de configucação
-        with open("config/default_user_config.json", "r") as f:
+        with open(os.path.join(CONFIG_DIR, "default_user_config.json"), "r") as f:
             default_user = json.load(f)
         
-        with get_connection().cursor() as cursor:
+        # Inserindo usuário padrão
+        try:
+            get_connection().start_transaction()
 
-            # Aqui eu apenas insiro o usuário padrão se ainda não existir um igual, ou seja, com o mesmo e-mail ou CPF (já que são valores únicos). A sintaxe é bem esquisita.
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled)
-                SELECT %s, %s, %s, %s, %s, %s, %s
-                FROM DUAL
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM usuarios WHERE email = %s OR cpf = %s
+            with get_connection().cursor() as cursor:
+
+                # Inserindo esses dados no usuário padrão. Se ele já existir, eu só atualizo ele.
+                cursor.execute(
+                        """
+                        INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            nome = VALUES(nome),
+                            senha = VALUES(senha),
+                            cpf = VALUES(cpf),
+                            admin = VALUES(admin),
+                            createdwhen = VALUES(createdwhen),
+                            enabled = VALUES(enabled)
+                        """,
+                        (default_user["name"], bcrypt.hashpw(default_user["password"].encode("utf-8"), bcrypt.gensalt()),
+                        default_user["email"], default_user["cpf"], True, current_datetime(), True)
                 )
-                """,
-                (default_user["name"], bcrypt.hashpw(default_user["password"].encode("utf-8"), bcrypt.gensalt()),
-                default_user["email"], default_user["cpf"], True, current_datetime(), True,
-                default_user["email"], default_user["cpf"])
-            )
+
+                get_connection().commit()
+                
+        except Error as e:
+            get_connection().rollback()
+
+            print(e)
+            st.error("Ocorreu um erro ao cadastrar o usuário padrão. Veja o erro no terminal.")
 
         # Adicionando outras variáveis no session state
         if "userinfo" not in sstate:

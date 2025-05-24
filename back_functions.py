@@ -1,7 +1,15 @@
 import mysql.connector as sqlconn
 from mysql.connector import Error
 import streamlit as st
-import os, bcrypt, datetime, uuid, pathlib, re, json, openpyxl
+from pathlib import Path
+import os, bcrypt, datetime, uuid, re, json, openpyxl
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_DIR = os.path.join(BASE_DIR, 'config')
+ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+
+log_file = os.path.join(LOG_DIR, f'{datetime.datetime.now().replace(microsecond=0).strftime("%d%m%Y_log.log")}')
 
 # Classes
 class Usuario():
@@ -250,7 +258,7 @@ def upload_file(file_content : bytes, file_path : str) -> None:
 
     # Escrevendo arquivo
     # Criando pasta uploads se ela ainda não existir
-    if not pathlib.Path("uploads").exists(): os.makedirs("uploads")
+    os.makedirs("uploads", exist_ok=True)
 
     # Criando a pasta especificada
     filedir = os.path.dirname(f"uploads/{file_path}")
@@ -281,10 +289,18 @@ def limpar_imagens_inuteis() -> None:
 
     # Criando pastas se não existirem
     if not os.path.exists("uploads/images"): os.makedirs("uploads/images")
+
+    count = 0
+
     # Apagando todas as imagens que não estiverem na lista
     for i in os.listdir("uploads/images"):
+        count += 1
+
         caminho = f"uploads/images/{i}"
         if(caminho not in dirs and os.path.exists(caminho)): os.remove(caminho)
+
+    # Mostrando uma mensagem
+    st.toast(f"{count} imagens removidas!")
 
 def get_single_info_by_id(id : int, table : str, column : str):
     "Retorna um dado baseado no id especificado."
@@ -298,6 +314,14 @@ def get_single_info_by_id(id : int, table : str, column : str):
         print(e)
         return None
 
+def register_log(log : str) -> None:
+    "Registra um log no arquivo do dia, em /logs."
+
+    os.makedirs("logs", exist_ok=True)
+
+    with open(log_file, "a+") as f:
+        f.write(f"[{current_datetime().strftime("%d-%m-%Y | %H:%M:%S")}] {log}\n")
+
 # Manipular banco
 def get_connection() -> sqlconn.MySQLConnection:
     "Essa função retorna a conexão com o banco. Se não houver uma conexão feita, uma tentativa de conectar é realizada."
@@ -308,7 +332,7 @@ def get_connection() -> sqlconn.MySQLConnection:
     if "conn" not in sstate or not sstate["conn"].is_connected():
 
         # Lendo o arquivo de configuração e guardando na variável
-        with open("config/config_banco.json") as config:
+        with open(os.path.join(CONFIG_DIR, "config_banco.json")) as config:
             dbconfig = json.load(config)
         
         # Conectando com as informações da variável descompactada
@@ -382,91 +406,93 @@ def criar_tabelas() -> None:
         - Caminho (VARCHAR(100) not null)
     """
 
-    # Criando o cursor
-    cursor = get_connection().cursor()
+    try:
+        get_connection().start_transaction()
+        with get_connection().cursor() as cursor:
+            # Tabela de usuários
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS usuarios(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    senha VARCHAR(255),
+                    email VARCHAR(255) NOT NULL UNIQUE,
+                    cpf VARCHAR(11) NOT NULL UNIQUE,
+                    admin BOOL NOT NULL,
+                    createdwhen DATETIME NOT NULL,
+                    enabled BOOL NOT NULL
+                )
+                """
+            )
 
-    # Tabela de usuários
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS usuarios(
-            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            nome VARCHAR(255) NOT NULL,
-            senha VARCHAR(255) NOT NULL,
-            email VARCHAR(255) NOT NULL UNIQUE,
-            cpf VARCHAR(11) NOT NULL UNIQUE,
-            admin BOOL NOT NULL,
-            createdwhen DATETIME NOT NULL,
-            enabled BOOL NOT NULL
-        )
-        """
-    )
+            # Tabela de equipamentos
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS equipamentos(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    modelo VARCHAR(255) NOT NULL,
+                    fabricante VARCHAR(255) NOT NULL,
+                    estado VARCHAR(255) NOT NULL,
+                    manutencao VARCHAR(255) NOT NULL,
+                    periodo INT NOT NULL,
+                    registeredby INT NOT NULL,
+                    registeredwhen DATETIME NOT NULL,
+                    modifiedwhen DATETIME NOT NULL,
+                    fotopath VARCHAR(100),
+                    FOREIGN KEY (registeredby) REFERENCES usuarios(id)
+                )
+                """
+            )
+            
+            # Tabela de ferramenta
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ferramentas(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    modelo VARCHAR(255) NOT NULL,
+                    fabricante VARCHAR(255) NOT NULL,
+                    specs VARCHAR(2048) NOT NULL,
+                    registeredby INT NOT NULL,
+                    registeredwhen DATETIME NOT NULL,
+                    modifiedwhen DATETIME NOT NULL,
+                    fotopath VARCHAR(100),
+                    FOREIGN KEY (registeredby) REFERENCES usuarios(id)
+                )
+                """
+            )
 
-    # Tabela de equipamentos
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS equipamentos(
-            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            nome VARCHAR(255) NOT NULL,
-            modelo VARCHAR(255) NOT NULL,
-            fabricante VARCHAR(255) NOT NULL,
-            estado VARCHAR(255) NOT NULL,
-            manutencao VARCHAR(255) NOT NULL,
-            periodo INT NOT NULL,
-            registeredby INT NOT NULL,
-            registeredwhen DATETIME NOT NULL,
-            modifiedwhen DATETIME NOT NULL,
-            fotopath VARCHAR(100),
-            FOREIGN KEY (registeredby) REFERENCES usuarios(id)
-        )
-        """
-    )
-    
-    # Tabela de ferramenta
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS ferramentas(
-            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            nome VARCHAR(255) NOT NULL,
-            modelo VARCHAR(255) NOT NULL,
-            fabricante VARCHAR(255) NOT NULL,
-            specs VARCHAR(2048) NOT NULL,
-            registeredby INT NOT NULL,
-            registeredwhen DATETIME NOT NULL,
-            modifiedwhen DATETIME NOT NULL,
-            fotopath VARCHAR(100),
-            FOREIGN KEY (registeredby) REFERENCES usuarios(id)
-        )
-        """
-    )
+            # Tabela de registros
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS registros(
+                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    registeredby INT NOT NULL,
+                    idequipamento INT,
+                    data DATETIME NOT NULL,
+                    registro VARCHAR(2000),
+                    FOREIGN KEY (registeredby) REFERENCES usuarios(id),
+                    FOREIGN KEY (idequipamento) REFERENCES equipamentos(id)
+                )
+                """
+            )
 
-    # Tabela de registros
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS registros(
-            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            registeredby INT NOT NULL,
-            idequipamento INT,
-            data DATETIME NOT NULL,
-            registro VARCHAR(2000),
-            FOREIGN KEY (registeredby) REFERENCES usuarios(id),
-            FOREIGN KEY (idequipamento) REFERENCES equipamentos(id)
-        )
-        """
-    )
+            # Tabela das fotos de registros
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS fotos_registros(
+                    idregistro INT NOT NULL,
+                    fotopath VARCHAR(100)
+                )
+                """
+            )
 
-    # Tabela das fotos de registros
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS fotos_registros(
-            idregistro INT NOT NULL,
-            fotopath VARCHAR(100)
-        )
-        """
-    )
-
-    # Salvando as alterações com commit() e fechando o cursor.
-    get_connection().commit()
-    cursor.close()
+            # Salvando as alterações com commit() e fechando o cursor.
+        get_connection().commit()
+    except Error as e:
+        get_connection().rollback()
+        print(e)
 
 # Funções pra usuário
 def check_cpf(cpf : int) -> int | None:
@@ -521,7 +547,7 @@ def check_email(email : str) -> str | None:
     valido = re.search(r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,}$", email)
     return bool(valido)
 
-def format_cpf(cpf : int | str):
+def format_cpf(cpf : str) -> str:
     "Formata um CPF com os traços e hífens."
 
     # Fazendo a versão formatada
@@ -532,11 +558,8 @@ def format_cpf(cpf : int | str):
 
     return cpf_format
 
-def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) -> None:
+def novo_usuario(nome : str, cpf : str, email : str, admin : bool) -> None:
     "A função vai requisitar todos os dados para criar um usuário e adicionará-o ao banco."
-
-    # Hasheando senha
-    senha_add = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt())
 
     # Adicionando o usuário no banco
     try:
@@ -547,14 +570,16 @@ def novo_usuario(nome : str, senha : str, cpf : str, email : str, admin : bool) 
                 """
                 INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (nome.upper(), senha_add, email, cpf, admin, current_datetime(), True)
+                """, (nome.upper(), None, email, cpf, admin, current_datetime(), True)
             )
         get_connection().commit()
+
+        register_log(f"Usuário {nome} criado por {st.session_state.userinfo[2].upper()}")
     except Error as e:
         get_connection().rollback()
         print(e)
 
-def login(usuario : str | int, password : str | bytes) -> bool:
+def login(usuario : str, password : str | bytes) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
 
     # Checando se o usuário existe
@@ -579,9 +604,56 @@ def login(usuario : str | int, password : str | bytes) -> bool:
 def logout() -> None:
     "Sai do usuário atual."
 
+    # Registrando
+    register_log(f"{st.session_state.userinfo[2]} fez LOGOUT")
+
     # Limpando sessão
     st.session_state.userinfo = tuple()
     st.session_state.logged = False
+
+@st.dialog("Definir Senha")
+def set_password_dialog(user):
+
+    sstate = st.session_state
+
+    # Criando text input com observação
+    senha = st.text_input("Insira a senha do seu usuário:red[*] (mínimo 8 caracteres)", type="password")
+    st.caption(":red[*]A senha só poderá ser definida novamente com ajuda do administrador.")
+
+    senha_confirma = st.text_input("Confirme a senha:", type="password")
+
+    # Variável que permite a alteração das senhas
+    pode_registrar = senha != None and len(senha) >= 8 and senha == senha_confirma
+
+    # Mostrando textos para o usuário
+    texto = st.empty()
+    with texto:   
+        if (senha != None and senha != "") and (senha_confirma != None and senha_confirma != "") and len(senha) >= 8:     
+            if senha == senha_confirma: st.success("As senhas batem.", icon=":material/check:")   
+            else: st.error("As senhas estão diferentes.", icon=":material/close:")
+    
+    # Espaço pra erro
+    erro_area = st.empty()
+
+    # Botão de definir, rodo a query pra atualizar a senha daquele usuário
+    if st.button("Definir", use_container_width=True):
+        if len(senha) < 8:
+            # Avisando se a senha for muito pequena
+            with erro_area:
+                st.error("Insira uma senha com 8 ou mais caracteres.")
+        elif pode_registrar:
+            # Rodando query
+            try:
+                get_connection().start_transaction()
+
+                with get_connection().cursor() as cursor:
+                    cursor.execute("UPDATE usuarios SET senha = %s WHERE email = %s OR cpf = %s", (bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()), user, user))
+
+                get_connection().commit()
+                st.rerun()
+            except Error as e:
+                get_connection().rollback()
+                print(e)
 
 # Funções de equipamento
 def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : tuple | None = None) -> None:
@@ -599,6 +671,8 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
                 """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
         get_connection().commit()
+
+        register_log(f"Usuário {st.session_state.userinfo[2]} registrou EQUIPAMENTO {nome}")
 
         # Se tem alguma foto, eu faço upload dela.
         if(foto): upload_file(foto[0], foto[1]) 
@@ -621,7 +695,7 @@ def show_basic_equip_info(nome : str, modelo : str, fabricante : str, estado : s
     if periodo > 1: col3.write(f"Periodicidade: {periodo} em {periodo} meses") # Se o período for maior que 1, exibo no formato X em X meses.
     else: col3.write("Periodicidade: Todo mês") # Se for 1, escrevo "Todo mês"
 
-def vizualizar_equipamento(equip : Equipamento):
+def vizualizar_equipamento(equip : Equipamento) -> None:
     "Função que mostra as informações do equipamento especificado com a busca."
 
     # Exibindo foto se ela existir
@@ -663,6 +737,8 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, fot
             )
         get_connection().commit()
 
+        register_log(f"Usuário {st.session_state.userinfo[2]} registrou FERRAMENTA {nome}")
+
         # Se tem uma foto, eu faço upload dela.
         if(foto): upload_file(foto[0], foto[1])
     except Error as e:
@@ -678,7 +754,7 @@ def show_basic_tool_info(nome : str, modelo : str, fabricante : str, specs : str
     st.subheader("Especificações", divider="gray")
     st.text(specs)
     
-def vizualizar_ferramenta(tool : Ferramenta):
+def vizualizar_ferramenta(tool : Ferramenta) -> None:
     "Função que mostra as informações da ferramenta especificado com a busca."
 
     # Exibindo com layout de foto se houver uma
@@ -707,7 +783,7 @@ def vizualizar_ferramenta(tool : Ferramenta):
     st.write(f"Modificado em: {format_time(tool.modifiedwhen)}")
 
 # Funções de registros
-def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, int]] | None = None):
+def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, int]] | None = None) -> None:
     "Pede as informações e adiciona um registro ao banco. A lista deve conter apenas tuplas, compostas por (arquivo em bytes, diretório)"
 
     # Adicionando registro
@@ -734,6 +810,8 @@ def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, i
 
         get_connection().commit()
 
+        register_log(f"Usuário {st.session_state.userinfo[2]} registrou MANUTENÇÃO para EQUIPAMENTO {get_single_info_by_id(idequipamento, "equipamentos", "nome")}")
+
         # Fazendo upload das fotos
         if fotos:
             for i in fotos:
@@ -743,7 +821,7 @@ def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, i
         get_connection().rollback()
         print(e)
 
-def vizualizar_registro(registro : Registro):
+def vizualizar_registro(registro : Registro) -> None:
     "Exibe todas as informações sobre o registro com o ID especificado."
 
     # Layout das informações
