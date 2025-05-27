@@ -86,41 +86,6 @@ def editar_equip(equipid : int):
 
             st.rerun()
 
-# Construindo o dialog para remover equipamento
-@st.dialog("Remover Equipamento")
-def remover_equip(equipid : int):
-
-    # Confirmação
-    st.write(f"Tem certeza de que quer apagar o equipamento ***{get_single_info_by_id(equipid, "equipamentos", "nome")}***?")
-
-    # Botões
-    btn1, btn2 = st.columns(2)
-
-    # Removendo equipamento
-    if btn1.button("Sim", use_container_width=True):
-        
-        nome_equip = get_single_info_by_id(equipid, "equipamentos", "nome")
-
-        try:
-            get_connection().start_transaction()
-            with get_connection().cursor() as cursor:
-                cursor.execute("DELETE FROM equipamentos WHERE id = %s", (equipid,))
-            get_connection().commit()
-
-            # Registrando
-            register_log(f"{sstate.userinfo[2]} removeu o EQUIPAMENTO {nome_equip}")
-
-            st.rerun()
-        except Error as e:
-            get_connection().rollback()
-            print(e)
-        
-        st.rerun()
-
-    # Fechando dialog
-    if btn2.button("Não", use_container_width=True): 
-        st.rerun()
-
 # Criando as abas
 tab1, tab2, tab3 = st.tabs(["Registrados", "Registrar Novo", "Editar"])
 
@@ -211,6 +176,4 @@ with tab3:
     if(sstate.userinfo[1]): st.caption("Mostrando todos os equipamentos.")
 
     # Botões
-    btn1, btn2 = st.columns(2)
-    btn1.button("Apagar este equipamento", type="primary", on_click=remover_equip if myselected else None, args=(myselected,), use_container_width=True)
-    btn2.button("Editar este equipamento", on_click=editar_equip if myselected else None, args=(myselected,), use_container_width=True)
+    st.button("Editar este equipamento", on_click=editar_equip if myselected else None, args=(myselected,), use_container_width=True)
