@@ -38,10 +38,11 @@ else:
         cols[1].caption("Se você ainda não tem uma senha, apenas insira seu usuário e clique no botão.")
         if cols[0].form_submit_button("Fazer login"):
             
-            # Checando se esse usuário já tem uma senha
+            # Checando se esse usuário existe e, posteriormente, se tem uma senha
             with get_connection().cursor() as cursor:
                 cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
-                has_password = bool(cursor.fetchone()[0])
+                search = cursor.fetchone()
+                has_password = bool(search[0]) if search else None
 
             # Faço as verificações todos os campos forem preenchidos
             if(has_password and all([usuario, senha])):
@@ -73,19 +74,22 @@ else:
                         st.rerun()
                     
                     else:
+
                         st.error("Não foi possível fazer login. Verifique todas as informações.")
 
-                        
                 # Se o dado estiver inválido, eu dou um erro
                 else:
                     st.error("Seu e-mail ou CPF inserido é inválido. Verifique se as informações estão corretas.")
             
-            elif not has_password:
+            elif has_password == False:
                 open_set_pass_dialog(usuario)
 
             # Se faltarem campos a serem preenchidos, eu aviso o usuário
-            else:
+            elif not all([usuario, senha]):
                 st.warning("Preencha todos os campos")
+
+            elif has_password == None:
+                st.error("Não foi possível fazer login. Verifique todas as informações.")
             
 # Botão de sobre nós
 # Criando o dialog de "sobre nós"

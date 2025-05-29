@@ -1,8 +1,8 @@
 Projeto feito para auxiliar os professores e estudantes do curso de Instrumentação Industrial na tarefa de registrar equipamentos e manutenções.
 Feito pelos alunos da escola SENAI Jairo Cândido, para alunos do mesmo curso. Sob orientação dos professores Fabiano Luizon Campos e Carlos Assis Silva Aguiar.
 
-- Artur Vidal de Almeida (backend/frontend, banco de dados e documentação)
-- João Victor Apolinário de Freitas (banco de dados e documentação)
+- Artur Vidal de Almeida (levantamento dos requisitos, backend/frontend, banco de dados e documentação)
+- João Victor Apolinário de Freitas (levantamento dos requisitos)
 
 ## Passos para set-up
 ### Dependências:

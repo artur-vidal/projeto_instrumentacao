@@ -180,7 +180,7 @@ with tab3:
         else:
             cursor.execute(
                 """
-                SELECT id FROM ferramentas WHERE registeredby = %s AND WHERE registeredby IN (SELECT id FROM usuarios WHERE enabled = TRUE) ORDER BY modifiedwhen ASC
+                SELECT id FROM ferramentas WHERE registeredby = %s AND registeredby IN (SELECT id FROM usuarios WHERE enabled = TRUE) ORDER BY modifiedwhen ASC
                 """, (sstate.userinfo[0],)
             )
         search = cursor.fetchall()
