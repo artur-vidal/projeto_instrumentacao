@@ -14,6 +14,9 @@ def editar_ferramenta(ferrid : int):
     with get_connection().cursor() as cursor:
         cursor.execute("SELECT nome, modelo, fabricante, specs FROM ferramentas WHERE id = %s", (ferrid,))
         search = cursor.fetchone()
+    close_connection()
+    
+    st.caption("Verifique se está editando o equipamento correto.")
 
     with st.form("edit_tool", enter_to_submit=False):
 
@@ -33,16 +36,13 @@ def editar_ferramenta(ferrid : int):
                 with get_connection().cursor() as cursor:
                     if imagem_f:
 
-                        # Apagando a imagem anterior
-                        cursor.execute("SELECT fotopath FROM ferramentas WHERE id = %s", (ferrid,))
-                        search = cursor.fetchone()               
-
                         # Guardando no banco de dados
                         extensao = Path(imagem_f.name).suffix
                         nome_arquivo = generate_filename(extensao)
                         
-                        get_connection().start_transaction()
                         try:
+                            get_connection().start_transaction()
+
                             cursor.execute(
                                 """
                                 UPDATE ferramentas SET nome = %s, modelo = %s, fabricante = %s, specs = %s, modifiedwhen = %s, fotopath = %s WHERE id = %s;
@@ -60,11 +60,15 @@ def editar_ferramenta(ferrid : int):
                             get_connection().rollback()
                             print(e)
 
+                        finally:
+                            close_connection()
+
                     else:
 
                         # Se não houver imagem, eu só mudo todo o resto
-                        get_connection().start_transaction()
                         try:
+                            get_connection().start_transaction()
+
                             cursor.execute(
                                 """
                                 UPDATE ferramentas SET nome = %s, modelo = %s, fabricante = %s, specs = %s, modifiedwhen = %s WHERE id = %s;
@@ -78,6 +82,9 @@ def editar_ferramenta(ferrid : int):
                         except Exception as e:
                             get_connection().rollback()
                             print(e)
+
+                        finally:
+                            close_connection()
 
             st.rerun()
 
@@ -94,10 +101,18 @@ def remover_ferramenta(ferrid : int):
     # Removendo ferramenta
     nome_tool = get_single_info_by_id(ferrid, "ferramentas", "nome")
     if btn1.button("Sim", use_container_width=True):
+        
+        try:
+            get_connection().start_transaction()
 
-        with get_connection().cursor() as cursor:
-            cursor.execute("DELETE FROM ferramentas WHERE id = %s", (ferrid,))
-        get_connection().commit()
+            with get_connection().cursor() as cursor:
+                cursor.execute("DELETE FROM ferramentas WHERE id = %s", (ferrid,))
+            get_connection().commit()
+        except Error as e:
+            get_connection().rollback()
+            print(e)
+        finally:
+            close_connection()
 
         # Registrando
         register_log(f"{sstate.userinfo[2]} removeu a FERRAMENTA {nome_tool}")
@@ -184,6 +199,7 @@ with tab3:
                 """, (sstate.userinfo[0],)
             )
         search = cursor.fetchall()
+    close_connection()
 
     if search:
         # Faço uma lista composta pelos IDs das ferramentas e coloco na selectbox
@@ -197,5 +213,5 @@ with tab3:
 
     # Botões
     btn1, btn2 = st.columns(2)
-    btn1.button("Apagar esta ferramenta", type="primary", on_click=remover_ferramenta if myselected else None, args=(myselected,), use_container_width=True)
-    btn2.button("Editar esta ferramenta", on_click=editar_ferramenta if myselected else None, args=(myselected,), use_container_width=True)
+    btn1.button("Editar esta ferramenta", on_click=editar_ferramenta if myselected else None, args=(myselected,), use_container_width=True)
+    btn2.button("Apagar esta ferramenta", type="primary", on_click=remover_ferramenta if myselected else None, args=(myselected,), use_container_width=True)

@@ -45,6 +45,7 @@ class Usuario():
         with get_connection().cursor() as cursor:
             cursor.execute("SELECT nome, email, cpf, admin FROM usuarios WHERE id = %s", (self.id,))
             search = cursor.fetchone()
+        close_connection()
 
         # Guardando na classe
         if search:
@@ -69,11 +70,13 @@ class Equipamento():
         self.periodo : int = None
         self.registeredby : int = None
         self.registeredwhen : datetime.datetime = None
+        self.modifiedby : int = None
         self.modifiedwhen : datetime.datetime = None
         self.fotopath : str = None
 
         # Guardando uma variável com o nome do autor do equipamento
         self.nome_autor : str = None
+        self.nome_modif : str = None
 
         # Variável que representa o estado de carregamento da classe (carregado/não carregado)
         self.loaded : bool = False
@@ -90,6 +93,7 @@ class Equipamento():
                         Periodicidade em meses: {self.periodo}\n
                         Registrado por: {self.nome_autor} (ID {self.registeredby}),
                         Registrado em: {self.registeredwhen},
+                        Registrado por: {self.nome_modif} (ID {self.modifiedby}),
                         Última modificação em: {self.modifiedwhen}\n
                         Caminho da foto: {self.fotopath}
                         """
@@ -101,8 +105,9 @@ class Equipamento():
         
         # Rodando query
         with get_connection().cursor() as cursor:
-            cursor.execute("SELECT nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath FROM equipamentos WHERE id = %s", (self.id,))
+            cursor.execute("SELECT nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedby, modifiedwhen, fotopath FROM equipamentos WHERE id = %s", (self.id,))
             search = cursor.fetchone()
+        close_connection()
 
         # Guardando na classe
         if search:
@@ -114,9 +119,12 @@ class Equipamento():
             self.periodo = search[5]
             self.registeredby = search[6]
             self.registeredwhen = search[7]
-            self.modifiedwhen = search[8]
-            self.fotopath = search[9]
+            self.modifiedby = search[8]
+            self.modifiedwhen = search[9]
+            self.fotopath = search[10]
+
             self.nome_autor = get_single_info_by_id(self.registeredby, "usuarios", "nome")
+            self.nome_modif = get_single_info_by_id(self.modifiedby, "usuarios", "nome")
 
             self.loaded = True
 
@@ -132,11 +140,13 @@ class Ferramenta():
         self.specs : str = None
         self.registeredby : int = None
         self.registeredwhen : datetime.datetime = None
+        self.modifiedby : int = None
         self.modifiedwhen : datetime.datetime = None
         self.fotopath : str = None
 
         # Guardando uma variável com o nome do autor do equipamento
         self.nome_autor : str = None
+        self.nome_modif : str = None
 
         # Variável que representa o estado de carregamento da classe (carregado/não carregado)
         self.loaded : bool = False
@@ -151,6 +161,7 @@ class Ferramenta():
                         Especificações: {self.specs}\n
                         Registrado por: {self.nome_autor} (ID {self.registeredby}),
                         Registrado em: {self.registeredwhen},
+                        Modificado por: {self.nome_modif} (ID {self.modifiedby}),
                         Última modificação em: {self.modifiedwhen}\n
                         Caminho da foto: {self.fotopath}
                         """
@@ -162,8 +173,9 @@ class Ferramenta():
         
         # Rodando query
         with get_connection().cursor() as cursor:
-            cursor.execute("SELECT nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedwhen, fotopath FROM ferramentas WHERE id = %s", (self.id,))
+            cursor.execute("SELECT nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedby, modifiedwhen, fotopath FROM ferramentas WHERE id = %s", (self.id,))
             search = cursor.fetchone()
+        close_connection()
 
         # Guardando na classe se houver encontrado
         if search:
@@ -173,9 +185,12 @@ class Ferramenta():
             self.specs = search[3]
             self.registeredby = search[4]
             self.registeredwhen = search[5]
-            self.modifiedwhen = search[6]
-            self.fotopath = search[7]
+            self.modifiedby = search[6]
+            self.modifiedwhen = search[7]
+            self.fotopath = search[8]
+
             self.nome_autor = get_single_info_by_id(self.registeredby, "usuarios", "nome")
+            self.nome_modif = get_single_info_by_id(self.modifiedby, "usuarios", "nome")
 
             self.loaded = True
 
@@ -220,6 +235,7 @@ class Registro():
             # Pegando as fotos
             cursor.execute("SELECT fotopath FROM fotos_registros WHERE idregistro = %s", (self.id,))
             fotosearch = cursor.fetchall()
+        close_connection()
         
         # Adicionando informações
         if infosearch:
@@ -286,6 +302,7 @@ def limpar_imagens_inuteis() -> None:
             """
         )
         dirs = [i[0] for i in cursor.fetchall()]
+    close_connection()
 
     # Criando pastas se não existirem
     if not os.path.exists("uploads/images"): os.makedirs("uploads/images")
@@ -294,10 +311,10 @@ def limpar_imagens_inuteis() -> None:
 
     # Apagando todas as imagens que não estiverem na lista
     for i in os.listdir("uploads/images"):
-        count += 1
-
         caminho = f"uploads/images/{i}"
-        if(caminho not in dirs and os.path.exists(caminho)): os.remove(caminho)
+        if(caminho not in dirs and os.path.exists(caminho)): 
+            count += 1
+            os.remove(caminho)
 
     # Mostrando uma mensagem
     st.toast(f"{count} imagens removidas!")
@@ -305,14 +322,17 @@ def limpar_imagens_inuteis() -> None:
 def get_single_info_by_id(id : int, table : str, column : str):
     "Retorna um dado baseado no id especificado."
 
+    retorno = None
     try:
         with get_connection().cursor() as cursor:
             cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", (id,))
             search = cursor.fetchone()
-            return search[0] if search else None
+            if search: retorno = search[0]
     except Error as e:
         print(e)
-        return None
+    finally:
+        close_connection()
+        return retorno
 
 def register_log(log : str) -> None:
     "Registra um log no arquivo do dia, em /logs."
@@ -336,8 +356,8 @@ def get_connection() -> sqlconn.MySQLConnection:
             dbconfig = json.load(config)
         
         # Conectando com as informações da variável descompactada
-        conn = sqlconn.connect(**dbconfig)
-        sstate["conn"] = conn
+        sstate["conn"] = sqlconn.connect(**dbconfig)
+        print("Conexão MySQL iniciada.")
 
     # Se eu tiver conseguido a conexão, eu crio o banco e uso ele caso ainda não tenha o feito
     if sstate["conn"].is_connected():
@@ -380,6 +400,7 @@ def criar_tabelas() -> None:
         - Periodicidade (INT not null)
         - Registrado por (INT FK usuarios(id) not null)
         - Registrado em (DATETIME not null)
+        - Modificado por (INT FK usuarios(id) not null)
         - Modificado em (DATETIME not null)
         - Caminho da Foto (VARCHAR(100))
     
@@ -391,6 +412,7 @@ def criar_tabelas() -> None:
         - Specs (VARCHAR(255) not null)
         - Registrado por (INT FK usuarios(id) not null)
         - Registrado em (DATETIME not null)
+        - Modificado por (INT FK usuarios(id) not null)
         - Modificado em (DATETIME not null) 
         - Caminho da Foto (VARCHAR(100))
 
@@ -438,9 +460,11 @@ def criar_tabelas() -> None:
                     periodo INT NOT NULL,
                     registeredby INT NOT NULL,
                     registeredwhen DATETIME NOT NULL,
+                    modifiedby INT NOT NULL,
                     modifiedwhen DATETIME NOT NULL,
                     fotopath VARCHAR(100),
-                    FOREIGN KEY (registeredby) REFERENCES usuarios(id)
+                    FOREIGN KEY (registeredby) REFERENCES usuarios(id),
+                    FOREIGN KEY (modifiedby) REFERENCES usuarios(id)
                 )
                 """
             )
@@ -456,9 +480,11 @@ def criar_tabelas() -> None:
                     specs VARCHAR(2048) NOT NULL,
                     registeredby INT NOT NULL,
                     registeredwhen DATETIME NOT NULL,
+                    modifiedby INT NOT NULL,
                     modifiedwhen DATETIME NOT NULL,
                     fotopath VARCHAR(100),
-                    FOREIGN KEY (registeredby) REFERENCES usuarios(id)
+                    FOREIGN KEY (registeredby) REFERENCES usuarios(id),
+                    FOREIGN KEY (modifiedby) REFERENCES usuarios(id)
                 )
                 """
             )
@@ -493,6 +519,8 @@ def criar_tabelas() -> None:
     except Error as e:
         get_connection().rollback()
         print(e)
+    finally:
+        close_connection()
 
 # Funções pra usuário
 def check_cpf(cpf : int) -> int | None:
@@ -574,10 +602,12 @@ def novo_usuario(nome : str, cpf : str, email : str, admin : bool) -> None:
             )
         get_connection().commit()
 
-        register_log(f"Usuário {nome} criado por {st.session_state.userinfo[2].upper()}")
+        register_log(f"Usuário '{nome.upper()}' criado por {st.session_state.userinfo[2].upper()}")
     except Error as e:
         get_connection().rollback()
         print(e)
+    finally:
+        close_connection()
 
 def login(usuario : str, password : str | bytes) -> bool:
     "Retorna True ou False baseado na existência do usuário (identificado por e-mail, nome ou cpf) e se a senha está correta."
@@ -586,6 +616,7 @@ def login(usuario : str, password : str | bytes) -> bool:
     with get_connection().cursor() as cursor:
         cursor.execute("SELECT senha, enabled FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
         search = cursor.fetchone() # Pegando o usuário apenas
+    close_connection()
 
     if search: # algo foi encontrado
         if search[1]: # está ativado
@@ -614,46 +645,47 @@ def logout() -> None:
 @st.dialog("Definir Senha")
 def set_password_dialog(user):
 
-    sstate = st.session_state
+    with st.form("set-pass"):
+        # Criando text input com observação
+        senha = st.text_input("Insira a senha do seu usuário:red[*] (mínimo 8 caracteres)", type="password")
+        st.caption(":red[*]A senha só poderá ser definida novamente com ajuda do administrador.")
 
-    # Criando text input com observação
-    senha = st.text_input("Insira a senha do seu usuário:red[*] (mínimo 8 caracteres)", type="password")
-    st.caption(":red[*]A senha só poderá ser definida novamente com ajuda do administrador.")
+        senha_confirma = st.text_input("Confirme a senha:", type="password")
 
-    senha_confirma = st.text_input("Confirme a senha:", type="password")
+        # Variável que permite a alteração das senhas
+        pode_registrar = senha != None and len(senha) >= 8 and senha == senha_confirma
 
-    # Variável que permite a alteração das senhas
-    pode_registrar = senha != None and len(senha) >= 8 and senha == senha_confirma
+        # Mostrando textos para o usuário
+        texto = st.empty()
+        with texto:   
+            if (senha != None and senha != "") and (senha_confirma != None and senha_confirma != "") and len(senha) >= 8:     
+                if senha == senha_confirma: st.success("As senhas batem.", icon=":material/check:")   
+                else: st.error("As senhas estão diferentes.", icon=":material/close:")
+        
+        # Espaço pra erro
+        erro_area = st.empty()
 
-    # Mostrando textos para o usuário
-    texto = st.empty()
-    with texto:   
-        if (senha != None and senha != "") and (senha_confirma != None and senha_confirma != "") and len(senha) >= 8:     
-            if senha == senha_confirma: st.success("As senhas batem.", icon=":material/check:")   
-            else: st.error("As senhas estão diferentes.", icon=":material/close:")
-    
-    # Espaço pra erro
-    erro_area = st.empty()
+        # Botão de definir, rodo a query pra atualizar a senha daquele usuário
+        if st.form_submit_button("Definir", use_container_width=True):
+            if len(senha) < 8:
+                # Avisando se a senha for muito pequena
+                with erro_area:
+                    st.error("Insira uma senha com 8 ou mais caracteres.")
+            elif pode_registrar:
+                # Rodando query
+                try:
+                    get_connection().start_transaction()
 
-    # Botão de definir, rodo a query pra atualizar a senha daquele usuário
-    if st.button("Definir", use_container_width=True):
-        if len(senha) < 8:
-            # Avisando se a senha for muito pequena
-            with erro_area:
-                st.error("Insira uma senha com 8 ou mais caracteres.")
-        elif pode_registrar:
-            # Rodando query
-            try:
-                get_connection().start_transaction()
+                    with get_connection().cursor() as cursor:
+                        cursor.execute("UPDATE usuarios SET senha = %s WHERE email = %s OR cpf = %s", (bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()), user, user))
 
-                with get_connection().cursor() as cursor:
-                    cursor.execute("UPDATE usuarios SET senha = %s WHERE email = %s OR cpf = %s", (bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()), user, user))
-
-                get_connection().commit()
-                st.rerun()
-            except Error as e:
-                get_connection().rollback()
-                print(e)
+                    get_connection().commit()
+                    st.rerun()
+                except Error as e:
+                    get_connection().rollback()
+                    print(e)
+                finally:
+                    close_connection()
 
 # Funções de equipamento
 def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : int, foto : tuple | None = None) -> None:
@@ -666,9 +698,9 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
         with get_connection().cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedwhen, fotopath)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
+                INSERT INTO equipamentos (nome, modelo, fabricante, estado, manutencao, periodo, registeredby, registeredwhen, modifiedby, modifiedwhen, fotopath)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (nome, modelo, fabricante, estado, manutencao, periodo, st.session_state.userinfo[0], current_datetime(), st.session_state.userinfo[0], current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
         get_connection().commit()
 
@@ -679,6 +711,8 @@ def novo_equipamento(nome : str, modelo : str, fabricante : str, estado : str, m
     except Error as e:
         get_connection().rollback()
         print(e)
+    finally:
+        close_connection()
 
 def show_basic_equip_info(nome : str, modelo : str, fabricante : str, estado : str, manutencao : str, periodo : str) -> None:
     "Exibe as informações básicas do equipamento."
@@ -715,10 +749,17 @@ def vizualizar_equipamento(equip : Equipamento) -> None:
         st.caption("Nenhuma imagem encontrada.")
         st.divider()
 
-    # Pesquisando nome de quem registrou e mostrando
-    st.write(f"Registrado por: {equip.nome_autor}")
-    st.write(f"Registrado em: {format_time(equip.registeredwhen)}")
-    st.write(f"Modificado em: {format_time(equip.modifiedwhen)}")
+    # Mostrando informações de edição/registro
+    if st.session_state.userinfo[1]:
+        cm_cols = st.columns(2, border=True)
+        cm_cols[0].write(f"Registrado por: {equip.nome_autor}")
+        cm_cols[0].write(f"Registrado em: {format_time(equip.registeredwhen)}")
+
+        cm_cols[1].write(f"Modificado por: {equip.nome_modif}")
+        cm_cols[1].write(f"Modificado em: {format_time(equip.modifiedwhen)}")
+    else:
+        st.write(f"Registrado por: {equip.nome_autor}")
+        st.write(f"Registrado em: {format_time(equip.registeredwhen)}")
         
 # Funções de ferramenta
 def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, foto : tuple | None = None) -> None:
@@ -731,9 +772,9 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, fot
         with get_connection().cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO ferramentas (nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedwhen, fotopath)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (nome, modelo, fabricante, specs, st.session_state.userinfo[0], current_datetime(), current_datetime(), f"uploads/{foto[1]}" if foto else None)
+                INSERT INTO ferramentas (nome, modelo, fabricante, specs, registeredby, registeredwhen, modifiedby, modifiedwhen, fotopath)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (nome, modelo, fabricante, specs, st.session_state.userinfo[0], current_datetime(), st.session_state.userinfo[0], current_datetime(), f"uploads/{foto[1]}" if foto else None)
             )
         get_connection().commit()
 
@@ -744,6 +785,8 @@ def novo_ferramenta(nome : str, modelo : str, fabricante : str, specs : str, fot
     except Error as e:
         get_connection().rollback()
         print(e)
+    finally:
+        close_connection()
 
 def show_basic_tool_info(nome : str, modelo : str, fabricante : str, specs : str) -> None:
     "Exibe as informações básicas do equipamento."
@@ -777,10 +820,17 @@ def vizualizar_ferramenta(tool : Ferramenta) -> None:
             show_basic_tool_info(tool.nome, tool.modelo, tool.fabricante, tool.specs)
             st.caption("Nenhuma imagem encontrada.")
 
-    # Pesquisando nome de quem registrou e mostrando
-    st.write(f"Registrado por: {tool.nome_autor}")
-    st.write(f"Registrado em: {format_time(tool.registeredwhen)}")
-    st.write(f"Modificado em: {format_time(tool.modifiedwhen)}")
+    # Mostrando informações de edição/registro
+    if st.session_state.userinfo[1]:
+        cm_cols = st.columns(2, border=True)
+        cm_cols[0].write(f"Registrado por: {tool.nome_autor}")
+        cm_cols[0].write(f"Registrado em: {format_time(tool.registeredwhen)}")
+
+        cm_cols[1].write(f"Modificado por: {tool.nome_modif}")
+        cm_cols[1].write(f"Modificado em: {format_time(tool.modifiedwhen)}")
+    else:
+        st.write(f"Registrado por: {tool.nome_autor}")
+        st.write(f"Registrado em: {format_time(tool.registeredwhen)}")
 
 # Funções de registros
 def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, int]] | None = None) -> None:
@@ -820,6 +870,9 @@ def novo_registro(idequipamento : int, registro : str, fotos : list[tuple[int, i
     except Error as e:
         get_connection().rollback()
         print(e)
+    
+    finally:
+        close_connection()
 
 def vizualizar_registro(registro : Registro) -> None:
     "Exibe todas as informações sobre o registro com o ID especificado."
@@ -899,7 +952,7 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
     emails, cpfs = set(), set() # O tamanho desses dois sets tem que ser igual à quantidade de usuários
 
     valid = True # Se torna False no momento em que alguma verificação falha
-    prompt_results = [] # Guarda as mensagens de erro
+    error_results = [] # Guarda as mensagens de erro
 
     # Iterando
     for i in range(len(users)):
@@ -908,19 +961,19 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
 
         if not check_email(users[i][1]):
             valid = False
-            prompt_results.append(f"E-mail inválido na ***linha {i + 2}***.")
+            error_results.append(f"E-mail inválido na ***linha {i + 2}***.")
 
         if not check_cpf(users[i][2]):
             valid = False
-            prompt_results.append(f"CPF inválido na ***linha {i + 2}***.")
+            error_results.append(f"CPF inválido na ***linha {i + 2}***.")
 
     # Verificando tamanho
     if not len(emails) == user_amount: 
         valid = False
-        prompt_results.append("Há algum e-mail duplicado na planilha.")
+        error_results.append("Há algum e-mail duplicado na planilha.")
     if not len(cpfs) == user_amount: 
         valid = False
-        prompt_results.append("Há algum CPF duplicado na planilha.")
+        error_results.append("Há algum CPF duplicado na planilha.")
 
     # Rodando tarefas
     if valid:
@@ -932,23 +985,25 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
             users_add.append([user[0].upper(), bcrypt.hashpw(user[3].encode("utf-8"), bcrypt.gensalt()), user[1], user[2], user[4], current_datetime(), True])
 
         # Transação
-        with st.spinner("Registrando", show_time=True):
-            try:
-                get_connection().start_transaction()
+        try:
+            get_connection().start_transaction()
 
-                with get_connection().cursor() as cursor:
-                    cursor.executemany("INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled) VALUES (%s, %s, %s, %s, %s, %s, %s)", users_add)
+            with get_connection().cursor() as cursor:
+                cursor.executemany("INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled) VALUES (%s, %s, %s, %s, %s, %s, %s)", users_add)
 
-                get_connection().commit()
+            get_connection().commit()
 
-                # Mensagenzinha de sucesso :D
-                st.success("Usuários cadastrados com sucesso!")
-            except Error as e:
-                get_connection().rollback()
+            # Mensagenzinha de sucesso :D
+            st.success("Usuários cadastrados com sucesso!")
+        except Error as e:
+            get_connection().rollback()
 
-                # Notificando erro
-                st.error("Ocorreu um erro durante o cadastro.")
-                print(e)
+            # Notificando erro
+            st.error("Ocorreu um erro durante o cadastro.")
+            print(e)
+        finally:
+            close_connection()
+
     # Printando erros caso algum tenha ocorrido
     else:
-        for i in prompt_results: st.error(i)
+        for i in error_results: st.error(i)

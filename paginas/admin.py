@@ -54,6 +54,7 @@ def arquivar():
     with get_connection().cursor() as cursor:
         cursor.execute("SELECT id FROM usuarios WHERE enabled = TRUE AND (id != 1 AND id != %s)", (sstate.userinfo[0],))
         usuarios = [i[0] for i in cursor.fetchall()]
+    close_connection()
 
     # Fazendo a lista
     func = partial(get_single_info_by_id, table="usuarios", column="nome")
@@ -76,6 +77,8 @@ def arquivar():
             get_connection().rollback()
             print(e)
             st.error("Ocorreu um erro ao arquivar o usuário. Cheque o console para verificar.")
+        finally:
+            close_connection()
 
 # Função para desarquivar usuário
 @st.dialog("Desarquivar Usuário")
@@ -87,6 +90,7 @@ def desarquivar():
         with get_connection().cursor() as cursor:
             cursor.execute("SELECT id FROM usuarios WHERE enabled = FALSE AND cpf != 00000000000")
             usuarios = [i[0] for i in cursor.fetchall()]
+        close_connection()
 
         # Fazendo a lista
         func = partial(get_single_info_by_id, table="usuarios", column="nome")
@@ -110,6 +114,9 @@ def desarquivar():
                 get_connection().rollback()
                 print(e)
                 st.error("Ocorreu um erro ao desarquivar o usuário. Cheque o console para verificar.")
+            
+            finally:
+                close_connection()
     else:
         with st.form("verify", border=False):
             senha = st.text_input("Digite sua senha para verificação.", type="password")
@@ -138,6 +145,7 @@ def remover_senha():
         with get_connection().cursor() as cursor:
             cursor.execute("SELECT id FROM usuarios WHERE email = %s or cpf = %s", (user, user))
             idusuario = cursor.fetchone()
+        close_connection()
         
         # Se existe, eu rodo a tarefa
         if idusuario:
@@ -156,6 +164,8 @@ def remover_senha():
                 except Error as e:
                     get_connection().rollback()
                     print(e)
+                finally:
+                    close_connection()
 
             elif idusuario[0] == 1:
                 st.warning(":warning: Não remova a senha do usuário padrão. Edite o arquivo de configuração ao invés disso.")

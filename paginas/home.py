@@ -11,6 +11,8 @@ def open_set_pass_dialog(user):
     with get_connection().cursor() as cursor:
         cursor.execute("SELECT EXISTS(SELECT 1 FROM usuarios WHERE email = %s OR cpf = %s)", (user, user))
         if cursor.fetchone()[0]: set_password_dialog(user)
+        else: print("Usuário não existe, não foi possível abrir o dialog para definir senha.")
+    close_connection()
 
 # Título (centralizado com CSS)
 st.markdown("<h1 style='text-align: center;'>Página Inicial</h1>", unsafe_allow_html=True)
@@ -43,6 +45,7 @@ else:
                 cursor.execute("SELECT senha FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
                 search = cursor.fetchone()
                 has_password = bool(search[0]) if search else None
+            close_connection()
 
             # Faço as verificações todos os campos forem preenchidos
             if(has_password and all([usuario, senha])):
@@ -57,6 +60,7 @@ else:
                         with get_connection().cursor() as cursor:
                             cursor.execute("SELECT id, admin, nome FROM usuarios WHERE email = %s OR cpf = %s", (usuario, usuario))
                             search = cursor.fetchone()
+                        close_connection()
 
                         # Guardando no session state
                         sstate.userinfo = search

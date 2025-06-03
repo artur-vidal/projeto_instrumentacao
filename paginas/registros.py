@@ -19,6 +19,7 @@ def load_equips():
             """
         )
         search = cursor.fetchall()
+    close_connection()
     
     return [i[0] for i in search] if search else None
 
@@ -32,7 +33,8 @@ with tab1:
                 """
             )
             search = cursor.fetchall()
-
+        close_connection()
+        
         if search:
             # Faço uma lista composta pelos IDs dos registros e coloco na selectbox
             regs = [i[0] for i in search]

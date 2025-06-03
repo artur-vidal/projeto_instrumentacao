@@ -15,7 +15,10 @@ def editar_equip(equipid : int):
     with get_connection().cursor() as cursor:
         cursor.execute("SELECT nome, modelo, fabricante, periodo, estado, manutencao FROM equipamentos WHERE id = %s", (equipid,))
         search = cursor.fetchone()
+    close_connection()
 
+    st.caption("Verifique se está editando o equipamento correto.")
+    
     with st.form("edit_equip", enter_to_submit=False):
 
         # Campos para entrada de informação
@@ -39,20 +42,17 @@ def editar_equip(equipid : int):
                 with get_connection().cursor() as cursor:
                     if imagem_e:
 
-                        # Apagando a imagem anterior
-                        cursor.execute("SELECT fotopath FROM equipamentos WHERE id = %s", (equipid,))
-                        search = cursor.fetchone()
-
                         # Guardando no banco de dados
                         extensao = Path(imagem_e.name).suffix
                         nome_arquivo = generate_filename(extensao)
                         
-                        get_connection().start_transaction()
                         try:
+                            get_connection().start_transaction()
+
                             cursor.execute(
                                 """
-                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, periodo = %s, modifiedwhen = %s, fotopath = %s WHERE id = %s;
-                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, periodo_novo, current_datetime(), f"uploads/images/{nome_arquivo}", equipid)
+                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, periodo = %s, modifiedby = %s, modifiedwhen = %s, fotopath = %s WHERE id = %s;
+                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, periodo_novo, st.session_state.userinfo[0], current_datetime(), f"uploads/images/{nome_arquivo}", equipid)
                             )
                             get_connection().commit()
 
@@ -62,18 +62,22 @@ def editar_equip(equipid : int):
                             # Registrando
                             register_log(f"{sstate.userinfo[2]} editou o EQUIPAMENTO {search[0]}")
 
-                        except:
+                        except Error as e:
                             get_connection().rollback()
+                            print(e)
+                        finally:
+                            close_connection()
 
                     else:
 
                         # Se não houver imagem, eu só mudo todo o resto
-                        get_connection().start_transaction()
                         try:
+                            get_connection().start_transaction()
+
                             cursor.execute(
                                 """
-                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, modifiedwhen = %s, periodo = %s WHERE id = %s;
-                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, current_datetime(), periodo_novo, equipid)
+                                UPDATE equipamentos SET nome = %s, modelo = %s, fabricante = %s, estado = %s, manutencao = %s, modifiedby = %s, modifiedwhen = %s, periodo = %s WHERE id = %s;
+                                """, (nome_novo, modelo_novo, fabri_novo, estado_novo, manutencao_novo, st.session_state.userinfo[0], current_datetime(), periodo_novo, equipid)
                             )
                             get_connection().commit()
 
@@ -83,6 +87,8 @@ def editar_equip(equipid : int):
                         except Error:
                             get_connection().rollback()
 
+                        finally:
+                            close_connection()
 
             st.rerun()
 
@@ -99,6 +105,7 @@ with tab1:
                 """
             )
             search = cursor.fetchall()
+        close_connection()
 
         if search:
             # Faço uma lista composta pelos IDs dos equipamentos e coloco na selectbox
@@ -164,6 +171,7 @@ with tab3:
                 """, (sstate.userinfo[0],)
             )
         search = cursor.fetchall()
+    close_connection()
 
     if search:
         # Faço uma lista composta pelos IDs dos equipamentos e coloco na selectbox
