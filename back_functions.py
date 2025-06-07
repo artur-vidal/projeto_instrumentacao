@@ -1,7 +1,7 @@
 import mysql.connector as sqlconn
 from mysql.connector import Error
+from collections import Counter
 import streamlit as st
-from pathlib import Path
 import os, bcrypt, datetime, uuid, re, json, openpyxl
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -523,7 +523,7 @@ def criar_tabelas() -> None:
         close_connection()
 
 # Funções pra usuário
-def check_cpf(cpf : int) -> int | None:
+def check_cpf(cpf : str) -> str | None:
     "Pega um CPF via input() e o retorna se for válido. Caso contrário, retorna None"
 
     cpf_str = str(cpf)
@@ -929,7 +929,7 @@ def vizualizar_registro(registro : Registro) -> None:
         st.caption("Este registro não contém fotos.")
 
 # Funções de importação
-def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
+def import_users(excel_file_bytes : bytes) -> None:
     "Lê todos os dados de usuários de uma planilha e os adiciona após validação."
 
     # Carregando a planilha
@@ -939,25 +939,30 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
     users_sheet = planilha[planilha.sheetnames[0]]
 
     # Guardando os usuários em uma lista
-    # 0 - Nome, 1 - Email, 2 - CPF, 3 - Senha, 4 - Admin
+    # 0 - Nome, 1 - Email, 2 - CPF, 3 - Admin
     users = []
-    for row in users_sheet.iter_rows(min_row=2, max_row=2+rows):
-        info = [row[i].value for i in range(5)]
-        if all(info[:4]) and info[4] is not None:
+
+    # listas para verificação de duplicatas
+    email_list = []
+    cpf_list = []
+
+    for row in users_sheet.iter_rows(min_row=2, max_row=2+users_sheet.max_row):
+        info = [row[i].value for i in range(4)]
+        if all(info[:3]) and info[3] is not None:
             users.append(info)
+            email_list.append(info[1])
+            cpf_list.append(info[2])
 
     # FAZENDO VERIFICAÇÕES
     # Validação de Síntaxe e Duplicatas
-    user_amount = len(users)
-    emails, cpfs = set(), set() # O tamanho desses dois sets tem que ser igual à quantidade de usuários
+    email_counter = Counter(email_list)
+    cpf_counter = Counter(cpf_list)
 
     valid = True # Se torna False no momento em que alguma verificação falha
     error_results = [] # Guarda as mensagens de erro
 
-    # Iterando
+    # Verificando validade
     for i in range(len(users)):
-        emails.add(users[i][1])
-        cpfs.add(users[i][2])
 
         if not check_email(users[i][1]):
             valid = False
@@ -967,29 +972,32 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
             valid = False
             error_results.append(f"CPF inválido na ***linha {i + 2}***.")
 
-    # Verificando tamanho
-    if not len(emails) == user_amount: 
+    # Verificando duplicados
+    duplicate_emails = [i for i, count in email_counter.items() if count > 1]
+    duplicate_cpf = [i for i, count in cpf_counter.items() if count > 1]
+
+    if len(duplicate_emails) > 0: 
         valid = False
-        error_results.append("Há algum e-mail duplicado na planilha.")
-    if not len(cpfs) == user_amount: 
+        for i in duplicate_emails: error_results.append(f"E-mail {i} duplicado.")
+    if len(duplicate_cpf) > 0: 
         valid = False
-        error_results.append("Há algum CPF duplicado na planilha.")
+        for i in duplicate_cpf: error_results.append(f"CPF {i} duplicado.")
 
     # Rodando tarefas
     if valid:
-        
+
         # Guardando os dados para a query em uma lista
         users_add = []
         for user in users:
-            # Nome, Senha, E-mail, CPF, Admin, Data de criação, Ativado
-            users_add.append([user[0].upper(), bcrypt.hashpw(user[3].encode("utf-8"), bcrypt.gensalt()), user[1], user[2], user[4], current_datetime(), True])
+            # Nome, E-mail, CPF, Admin, Data de criação, Ativado
+            users_add.append([user[0].upper(), user[1], user[2], user[3], current_datetime(), True])
 
         # Transação
         try:
             get_connection().start_transaction()
 
             with get_connection().cursor() as cursor:
-                cursor.executemany("INSERT INTO usuarios (nome, senha, email, cpf, admin, createdwhen, enabled) VALUES (%s, %s, %s, %s, %s, %s, %s)", users_add)
+                cursor.executemany("INSERT INTO usuarios (nome, email, cpf, admin, createdwhen, enabled) VALUES (%s, %s, %s, %s, %s, %s)", users_add)
 
             get_connection().commit()
 
@@ -999,7 +1007,7 @@ def import_users(excel_file_bytes : bytes, rows : int = 10) -> None:
             get_connection().rollback()
 
             # Notificando erro
-            st.error("Ocorreu um erro durante o cadastro.")
+            st.error("Ocorreu um erro durante o(s) cadastro(s).")
             print(e)
         finally:
             close_connection()

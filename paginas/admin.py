@@ -39,11 +39,8 @@ def cadastrar():
 def importar():
     arquivo = st.file_uploader("Selecione sua planilha", type="xlsx")
     st.caption("Caso altere a planilha, é necessário carregar o arquivo novamente.")
-    qtd = st.slider("Deseja registrar quantos usuários?", 10, 50, step=5)
 
-    if arquivo:
-        if st.button("Importar"):
-            import_users(arquivo, qtd)
+    if arquivo and st.button("Importar"): import_users(arquivo)
     
 # Função para arquivar usuário
 @st.dialog("Arquivar Usuário")
